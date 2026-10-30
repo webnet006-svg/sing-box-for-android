@@ -4,14 +4,19 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -33,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.nekohasekai.sfa.R
@@ -54,6 +60,7 @@ fun DashboardScreen(
     showStartFab: Boolean = false,
     showStatusBar: Boolean = false,
     onOpenNewProfile: (NewProfileArgs) -> Unit = {},
+    onToggleService: (() -> Unit)? = null,
     viewModel: DashboardViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -65,7 +72,34 @@ fun DashboardScreen(
 
     OverrideTopBar {
         TopAppBar(
-            title = { Text(stringResource(R.string.title_dashboard)) },
+            navigationIcon = {
+                IconButton(onClick = { showOthersMenu = true }) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = stringResource(R.string.title_others),
+                        tint = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(26.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "DEMS VPN",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            },
             actions = {
                 Box {
                     IconButton(onClick = { showOthersMenu = true }) {
@@ -153,24 +187,55 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(bottom = bottomPadding),
         ) {
-            // Dynamic dashboard cards
-            // Show cards when service is running OR if it's the Profiles card (always available)
+            // 1. Top Combined Live Stats Card (Débit, Upload, Ping, waveform chart)
+            item {
+                VpnLiveStatsCard(
+                    downlink = uiState.downlink,
+                    uplink = uiState.uplink,
+                    trafficHistory = uiState.downlinkHistory,
+                )
+            }
+
+            // 2. Center Power Section: Tooltip, mascot, giant circular button, status pill, IP info
+            item {
+                VpnPowerSection(
+                    serviceStatus = serviceStatus,
+                    onToggle = {
+                        if (onToggleService != null) {
+                            onToggleService()
+                        } else {
+                            viewModel.toggleService()
+                        }
+                    },
+                )
+            }
+
+            // 3. Server Selector Card: Screen icon, Server Name, Location, Flag, Chevron
+            item {
+                val selectedProfile = uiState.profiles.find { it.id == uiState.selectedProfileId }
+                VpnServerSelectorCard(
+                    selectedProfile = selectedProfile,
+                    onClick = {
+                        viewModel.showProfilePickerSheet()
+                    },
+                )
+            }
+
+            // Additional dynamic dashboard cards (Clash mode, Debug, Connections, etc.)
             val serviceRunning = uiState.isStatusVisible
 
-            // Filter cards based on availability
+            // Filter cards based on availability (excluding standalone traffic and profiles handled above)
             val actuallyVisibleCards =
                 uiState.visibleCards.filter { cardGroup ->
+                    cardGroup != CardGroup.DownloadTraffic &&
+                    cardGroup != CardGroup.UploadTraffic &&
+                    cardGroup != CardGroup.Profiles &&
                     when {
-                        // The remote dashboard only renders cards backed by the
-                        // command protocol: profiles and system proxy are
-                        // operations on the local device.
                         isRemote ->
-                            cardGroup != CardGroup.Profiles &&
-                                cardGroup != CardGroup.SystemProxy &&
+                            cardGroup != CardGroup.SystemProxy &&
                                 serviceRunning &&
                                 isCardAvailableWhenServiceRunning(cardGroup, uiState)
 
-                        cardGroup == CardGroup.Profiles -> true // Profiles card is always available
                         else -> serviceRunning && isCardAvailableWhenServiceRunning(cardGroup, uiState)
                     }
                 }.toSet()
@@ -257,6 +322,18 @@ fun DashboardScreen(
                     }
                 }
             }
+        }
+
+        if (uiState.showProfilePickerSheet) {
+            ProfilePickerSheet(
+                profiles = uiState.profiles,
+                selectedProfileId = uiState.selectedProfileId,
+                onProfileSelected = { profile -> viewModel.selectProfile(profile.id) },
+                onProfileEdit = viewModel::editProfile,
+                onProfileDelete = viewModel::deleteProfile,
+                onProfileMove = viewModel::moveProfile,
+                onDismiss = viewModel::hideProfilePickerSheet,
+            )
         }
     }
 }

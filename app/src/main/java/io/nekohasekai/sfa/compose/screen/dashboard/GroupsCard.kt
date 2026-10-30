@@ -257,6 +257,23 @@ private fun GroupsCardContent(
                 }
             }
 
+            uiState.groups.isEmpty() -> {
+                item(key = "groups_empty") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.status_default),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                }
+            }
+
             else -> {
                 uiState.groups.forEach { group ->
                     val isExpanded = uiState.expandedGroups.contains(group.tag)

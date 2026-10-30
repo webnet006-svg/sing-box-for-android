@@ -1,8 +1,8 @@
 <resources>
-    <color name="seed">#d81b60</color>
-    <color name="surface_80">#CC1C1B1F</color>
+    <color name="seed">#00E5FF</color>
+    <color name="surface_80">#CC031427</color>
 
-    <color name="blue_grey_600">#546e7a</color>
+    <color name="blue_grey_600">#00B4D8</color>
 
     <color name="log_red">#ff2158</color>
     <color name="log_green">#2ecc71</color>

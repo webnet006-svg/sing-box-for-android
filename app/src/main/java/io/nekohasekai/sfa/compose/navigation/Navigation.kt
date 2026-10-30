@@ -98,6 +98,7 @@ fun NavHost(
     newProfileArgs: NewProfileArgs = NewProfileArgs(),
     onClearNewProfileArgs: () -> Unit = {},
     onOpenNewProfile: (NewProfileArgs) -> Unit = {},
+    onToggleService: (() -> Unit)? = null,
     dashboardViewModel: DashboardViewModel? = null,
     logViewModel: LogViewModel? = null,
     groupsViewModel: GroupsViewModel? = null,
@@ -121,6 +122,7 @@ fun NavHost(
                     showStartFab = showStartFab,
                     showStatusBar = showStatusBar,
                     onOpenNewProfile = onOpenNewProfile,
+                    onToggleService = onToggleService,
                     viewModel = dashboardViewModel,
                 )
             } else {
@@ -129,6 +131,7 @@ fun NavHost(
                     showStartFab = showStartFab,
                     showStatusBar = showStatusBar,
                     onOpenNewProfile = onOpenNewProfile,
+                    onToggleService = onToggleService,
                 )
             }
         }

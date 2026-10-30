@@ -1,10 +1,25 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <!-- App -->
-    <string name="app_name" translatable="false">sing-box</string>
+    <string name="app_name" translatable="false">ZALAM VPN</string>
     <string name="app_version_title">App version</string>
     <string name="language">Language</string>
     <string name="system_default">System default</string>
+
+    <!-- Custom VPN Strings -->
+    <string name="vpn_speed_down">Débit</string>
+    <string name="vpn_speed_up">Upload</string>
+    <string name="vpn_latency_ping">Ping</string>
+    <string name="vpn_status_connected">Connecté</string>
+    <string name="vpn_status_disconnected">Déconnecté</string>
+    <string name="vpn_status_connecting">Connexion…</string>
+    <string name="vpn_status_stopping">Arrêt…</string>
+    <string name="vpn_connection_secured">Votre connexion est sécurisée</string>
+    <string name="vpn_connection_unsecured">Votre connexion n\'est pas sécurisée</string>
+    <string name="vpn_mobile_ip">IP du mobile : %1$s</string>
+    <string name="vpn_paused_tooltip">En pause · appuyez ici pour reprendre</string>
+    <string name="vpn_tap_to_connect">Appuyez pour vous connecter</string>
+    <string name="vpn_select_server">Sélectionner un serveur</string>
 
     <!-- Common Actions -->
     <string name="ok">OK</string>
@@ -47,15 +62,15 @@
     <string name="default_text">Default</string>
 
     <!-- Navigation Titles -->
-    <string name="title_dashboard">Dashboard</string>
+    <string name="title_dashboard">ACCUEIL</string>
     <string name="title_configuration">Profiles</string>
-    <string name="title_log">Logs</string>
-    <string name="title_settings">Settings</string>
+    <string name="title_log">JOURNAL</string>
+    <string name="title_settings">PARAMÈTRES</string>
     <string name="title_app_settings">App</string>
     <string name="title_new_profile">New Profile</string>
     <string name="title_edit_profile">Edit Profile</string>
     <string name="title_edit_configuration">Edit Configuration</string>
-    <string name="title_groups">Groups</string>
+    <string name="title_groups">SERVEUR</string>
     <string name="title_debug">Debug</string>
     <string name="title_connections">Connections</string>
     <string name="title_others">Others</string>

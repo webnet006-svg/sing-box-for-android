@@ -1025,7 +1025,7 @@ class MainActivity :
                     val serviceRunning =
                         currentServiceStatus == Status.Started || currentServiceStatus == Status.Starting
                     val showStatusBar = isRemote || serviceRunning || currentServiceStatus == Status.Stopping
-                    val showStartFab = !isRemote && !serviceRunning && dashboardUiState.selectedProfileId != -1L
+                    val showStartFab = !isRemote && !serviceRunning && dashboardUiState.selectedProfileId != -1L && currentRoute != Screen.Dashboard.route
                     val bottomOverlayPadding = paddingValues.calculateBottomPadding()
 
                     NavHost(
@@ -1036,6 +1036,13 @@ class MainActivity :
                         newProfileArgs = newProfileArgs,
                         onClearNewProfileArgs = { newProfileArgs = NewProfileArgs() },
                         onOpenNewProfile = openNewProfile,
+                        onToggleService = {
+                            if (currentServiceStatus == Status.Started || currentServiceStatus == Status.Starting) {
+                                dashboardViewModel.toggleService()
+                            } else {
+                                startService()
+                            }
+                        },
                         dashboardViewModel = dashboardViewModel,
                         logViewModel = logViewModel,
                         groupsViewModel = groupsViewModel,
