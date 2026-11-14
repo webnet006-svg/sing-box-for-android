@@ -1,5 +1,7 @@
 package io.nekohasekai.sfa.compose.screen.dashboard
 
+import android.content.ClipboardManager
+import android.content.Context
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.FileUpload
@@ -71,6 +74,7 @@ import io.nekohasekai.sfa.compose.screen.configuration.ProfileImportHandler
 import io.nekohasekai.sfa.compose.screen.qrscan.QRScanResult
 import io.nekohasekai.sfa.compose.util.QRCodeGenerator
 import io.nekohasekai.sfa.compose.util.RelativeTimeFormatter
+import io.nekohasekai.sfa.dams.importer.ClipboardImporter
 import io.nekohasekai.sfa.database.Profile
 import io.nekohasekai.sfa.database.TypedProfile
 import io.nekohasekai.sfa.ktx.errorDialogBuilder
@@ -122,6 +126,54 @@ fun ProfilesCard(
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
 
     var showQRScanSheet by remember { mutableStateOf(false) }
+
+    val clipboardImporter = remember { ClipboardImporter(context) }
+    var importResult by remember { mutableStateOf<ClipboardImporter.Imported?>(null) }
+    var showImportResultDialog by remember { mutableStateOf(false) }
+    var pendingSubscriptionUrl by remember { mutableStateOf<String?>(null) }
+
+    fun importFromClipboard() {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val text = clipboard?.primaryClip
+            ?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)
+            ?.coerceToText(context)
+            ?.toString()
+        if (text.isNullOrBlank()) {
+            Toast.makeText(context, R.string.dams_clipboard_empty, Toast.LENGTH_SHORT).show()
+            return
+        }
+        coroutineScope.launch {
+            when (val outcome = clipboardImporter.importText(text)) {
+                is ClipboardImporter.Outcome.Success -> withContext(Dispatchers.Main) {
+                    importResult = outcome.result
+                    if (outcome.result.subscriptionUrl != null) {
+                        pendingSubscriptionUrl = outcome.result.subscriptionUrl
+                    } else {
+                        showImportResultDialog = true
+                    }
+                }
+                is ClipboardImporter.Outcome.Error -> withContext(Dispatchers.Main) {
+                    context.errorDialogBuilder(Exception(outcome.message)).show()
+                }
+            }
+        }
+    }
+
+    fun importSubscription(url: String, asRemote: Boolean) {
+        coroutineScope.launch {
+            when (val outcome = clipboardImporter.importSubscription(url, asRemote)) {
+                is ClipboardImporter.Outcome.Success -> withContext(Dispatchers.Main) {
+                    importResult = mergeImportResults(importResult, outcome.result)
+                    showImportResultDialog = true
+                }
+                is ClipboardImporter.Outcome.Error -> withContext(Dispatchers.Main) {
+                    context.errorDialogBuilder(Exception(outcome.message)).show()
+                    if (importResult != null) showImportResultDialog = true
+                }
+            }
+        }
+    }
 
     val importFromFileLauncher =
         rememberLauncherForActivityResult(
@@ -279,6 +331,16 @@ fun ProfilesCard(
                     modifier = Modifier.padding(vertical = 16.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+
+                TextButton(onClick = { importFromClipboard() }) {
+                    Icon(
+                        imageVector = Icons.Outlined.ContentPaste,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.dams_paste_clipboard))
+                }
             } else {
                 ProfileSelectorButton(
                     selectedProfile = selectedProfile,
@@ -408,6 +470,26 @@ fun ProfilesCard(
                     },
                     supportingContent = {
                         Text(stringResource(R.string.import_from_file_description))
+                    },
+                )
+
+                ListItem(
+                    modifier = Modifier.clickable {
+                        onHideAddProfileSheet()
+                        importFromClipboard()
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Outlined.ContentPaste,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                    },
+                    headlineContent = {
+                        Text(stringResource(R.string.dams_paste_clipboard))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.dams_paste_clipboard_description))
                     },
                 )
 
@@ -617,6 +699,91 @@ fun ProfilesCard(
             },
         )
     }
+
+    pendingSubscriptionUrl?.let { url ->
+        AlertDialog(
+            onDismissRequest = {
+                pendingSubscriptionUrl = null
+                if (importResult != null) showImportResultDialog = true
+            },
+            title = { Text(stringResource(R.string.dams_subscription_title)) },
+            text = { Text(stringResource(R.string.dams_subscription_message, url)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingSubscriptionUrl = null
+                        importSubscription(url, true)
+                    },
+                ) {
+                    Text(stringResource(R.string.dams_subscription_remote))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        pendingSubscriptionUrl = null
+                        importSubscription(url, false)
+                    },
+                ) {
+                    Text(stringResource(R.string.dams_subscription_local))
+                }
+            },
+        )
+    }
+
+    val result = importResult
+    if (showImportResultDialog && result != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showImportResultDialog = false
+                importResult = null
+            },
+            title = { Text(stringResource(R.string.dams_import_result_title)) },
+            text = {
+                Column {
+                    Text(
+                        stringResource(
+                            R.string.dams_import_result_message,
+                            result.profiles.size,
+                            result.skipped,
+                        ),
+                    )
+                    if (result.failures.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            stringResource(
+                                R.string.dams_import_result_failures,
+                                result.failures.joinToString("\n"),
+                            ),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showImportResultDialog = false
+                        importResult = null
+                    },
+                ) {
+                    Text(stringResource(R.string.dams_import_ok))
+                }
+            },
+        )
+    }
+}
+
+private fun mergeImportResults(
+    current: ClipboardImporter.Imported?,
+    next: ClipboardImporter.Imported,
+): ClipboardImporter.Imported {
+    if (current == null) return next
+    return ClipboardImporter.Imported(
+        profiles = current.profiles + next.profiles,
+        skipped = current.skipped + next.skipped,
+        failures = current.failures + next.failures,
+        subscriptionUrl = next.subscriptionUrl,
+    )
 }
 
 private suspend fun createProfileContent(profile: Profile): ByteArray {

@@ -223,6 +223,8 @@ dependencies {
     }
     implementation("com.google.guava:guava:33.6.0-android")
 
+    testImplementation("junit:junit:4.13.2")
+
     // API 24+ dependencies (play/other)
     "playImplementation"("androidx.lifecycle:lifecycle-livedata-ktx:$lifecycleVersion24")
     "playImplementation"("androidx.lifecycle:lifecycle-viewmodel-ktx:$lifecycleVersion24")

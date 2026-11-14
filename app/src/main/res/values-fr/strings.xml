@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="dams_paste_clipboard">Coller depuis le presse-papiers</string>
+    <string name="dams_paste_clipboard_description">Importer des liens de partage, une configuration ou un abonnement depuis le presse-papiers</string>
+    <string name="dams_clipboard_empty">Le presse-papiers est vide</string>
+    <string name="dams_import_result_title">Importation terminée</string>
+    <string name="dams_import_result_message">%1$d profil(s) importé(s), %2$d ignoré(s).</string>
+    <string name="dams_import_result_failures">Impossible d\'importer :\n%1$s</string>
+    <string name="dams_import_result_nothing">Aucun contenu importable trouvé</string>
+    <string name="dams_import_failed">Échec de l\'importation : %1$s</string>
+    <string name="dams_subscription_title">URL d\'abonnement</string>
+    <string name="dams_subscription_message">Comment souhaitez-vous importer %1$s ?</string>
+    <string name="dams_subscription_remote">Ajouter comme profil distant</string>
+    <string name="dams_subscription_local">Importer le contenu comme profils locaux</string>
+    <string name="dams_import_ok">OK</string>
+</resources>
