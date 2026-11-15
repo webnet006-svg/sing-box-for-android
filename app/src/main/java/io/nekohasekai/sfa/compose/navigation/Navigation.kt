@@ -12,6 +12,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import io.nekohasekai.sfa.compose.screen.am.A2MTUNHomeScreen
 import io.nekohasekai.sfa.compose.screen.configuration.NewProfileScreen
 import io.nekohasekai.sfa.compose.screen.connections.ConnectionDetailsRoute
 import io.nekohasekai.sfa.compose.screen.connections.ConnectionsPage
@@ -131,6 +132,19 @@ fun NavHost(
                     onOpenNewProfile = onOpenNewProfile,
                 )
             }
+        }
+
+        composable("am_home") {
+            A2MTUNHomeScreen(
+                serviceStatus = serviceStatus,
+                dashboardViewModel = dashboardViewModel ?: viewModel(),
+                onNavigate = { route ->
+                    navController.navigate(route) {
+                        launchSingleTop = true
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
         }
 
         composable(Screen.Log.route) {

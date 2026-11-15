@@ -114,6 +114,7 @@ import io.nekohasekai.sfa.compose.component.RemoteStatusBar
 import io.nekohasekai.sfa.compose.component.ServiceStatusBar
 import io.nekohasekai.sfa.compose.component.SnackbarHost
 import io.nekohasekai.sfa.compose.component.UpdateAvailableDialog
+import io.nekohasekai.sfa.compose.component.A2MNavigationBar
 import io.nekohasekai.sfa.compose.component.UptimeText
 import io.nekohasekai.sfa.compose.model.Connection
 import io.nekohasekai.sfa.compose.navigation.NavHost
@@ -134,6 +135,7 @@ import io.nekohasekai.sfa.compose.screen.tools.OpenVPNStatusViewModel
 import io.nekohasekai.sfa.compose.screen.tools.TaildropSendManager
 import io.nekohasekai.sfa.compose.screen.tools.TailscaleSSHSharedViewModel
 import io.nekohasekai.sfa.compose.screen.tools.TailscaleStatusViewModel
+import io.nekohasekai.sfa.compose.screen.am.A2MTUNHomeScreen
 import io.nekohasekai.sfa.compose.screen.usbip.USBIPStatusViewModel
 import io.nekohasekai.sfa.compose.theme.Theme
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
@@ -155,6 +157,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val A2M_TUN_HOME_ROUTE = "am_home"
 
 class MainActivity :
     AppCompatActivity(),
@@ -1304,7 +1308,21 @@ class MainActivity :
                     bottomBar = {
                         if (!isSubScreen) {
                             val hasUpdate by UpdateState.hasUpdate
-                            NavigationBar {
+                            if (currentRoute == A2M_TUN_HOME_ROUTE) {
+                                A2MNavigationBar(
+                                    selectedRoute = currentRoute,
+                                    onNavigate = { route ->
+                                        navController.navigate(route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    },
+                                )
+                            } else {
+                                NavigationBar {
                                 bottomNavigationScreens.forEach { screen ->
                                     NavigationBarItem(
                                         icon = {
@@ -1346,6 +1364,7 @@ class MainActivity :
                                 }
                             }
                         }
+                    }
                     },
                 ) { paddingValues ->
                     scaffoldContent(paddingValues)
