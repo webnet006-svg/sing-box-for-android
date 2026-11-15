@@ -2,13 +2,16 @@ package io.nekohasekai.sfa.compose.screen.am
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -34,7 +37,9 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -82,6 +87,15 @@ private val A2M_CONNECT_BRUSH = Brush.radialGradient(listOf(Color(0xFF0B3C78), C
 private val A2M_CONNECT_GLOW_BRUSH = Brush.radialGradient(listOf(Color(0xFF087DFF), Color(0xFF005DFF)))
 private val A2M_CARD_BRUSH = Brush.linearGradient(listOf(Color(0xFF071B5B), Color(0xFF04112A)))
 
+private suspend fun fetchExitIp(): String? =
+    withContext(Dispatchers.IO) {
+        runCatching {
+            HTTPClient().use { client ->
+                JSONObject(client.getString(A2M_IP_API_URL)).optString("ip")
+            }
+        }.getOrNull()
+    }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun A2MTUNHomeScreen(
@@ -97,15 +111,6 @@ fun A2MTUNHomeScreen(
     var isRefreshingIp by remember { mutableStateOf(false) }
     var toastMessage by remember { mutableStateOf<String?>(null) }
     var showMenu by remember { mutableStateOf(false) }
-
-    suspend fun fetchExitIp(): String? =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                HTTPClient().use { client ->
-                    JSONObject(client.getString(A2M_IP_API_URL)).optString("ip")
-                }
-            }.getOrNull()
-        }
 
     LaunchedEffect(serviceStatus) {
         if (serviceStatus == Status.Started) {
