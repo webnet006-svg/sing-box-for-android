@@ -112,7 +112,7 @@ fun NavHost(
 ) {
     androidx.navigation.compose.NavHost(
         navController = navController,
-        startDestination = Screen.Dashboard.route,
+        startDestination = "am_home",
         modifier = modifier,
     ) {
         composable(Screen.Dashboard.route) {
