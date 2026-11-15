@@ -112,6 +112,7 @@ fun A2MTUNHomeScreen(
 
     var exitIp by remember { mutableStateOf<String?>(null) }
     var isRefreshingIp by remember { mutableStateOf(false) }
+    var selectedProtocol by remember { mutableStateOf<String?>(null) }
     var toastMessage by remember { mutableStateOf<String?>(null) }
     var showMenu by remember { mutableStateOf(false) }
 
@@ -121,6 +122,14 @@ fun A2MTUNHomeScreen(
             exitIp = fetchExitIp()
             isRefreshingIp = false
         }
+    }
+
+    LaunchedEffect(uiState.selectedProfileId, uiState.profiles) {
+        val profile = uiState.profiles.firstOrNull { it.id == uiState.selectedProfileId }
+        selectedProtocol =
+            profile?.let { selected ->
+                withContext(Dispatchers.IO) { A2MProfileInfo.protocolLabel(selected) }
+            }
     }
 
     LaunchedEffect(toastMessage) {
@@ -230,8 +239,9 @@ fun A2MTUNHomeScreen(
 
                 A2MServerCard(
                     serverName = uiState.selectedProfileName ?: "Aucun serveur sélectionné",
+                    protocol = selectedProtocol,
                     isSelected = uiState.selectedProfileId != -1L,
-                    onClick = { dashboardViewModel.showProfilePickerSheet() },
+                    onClick = { onNavigate(A2MRoutes.SERVERS) },
                 )
 
                 A2MTrafficCard(uiState = uiState)
@@ -513,6 +523,7 @@ private fun A2MConnectButton(
 @Composable
 private fun A2MServerCard(
     serverName: String,
+    protocol: String?,
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
@@ -558,7 +569,7 @@ private fun A2MServerCard(
                 Text(
                     text =
                     if (isSelected) {
-                        "Serveur sélectionné"
+                        protocol?.let { "$it · Serveur sélectionné" } ?: "Serveur sélectionné"
                     } else {
                         "Touchez pour choisir un serveur"
                     },

@@ -13,6 +13,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import io.nekohasekai.sfa.compose.screen.am.A2MPlaceholderScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MServersScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MTUNHomeScreen
 import io.nekohasekai.sfa.compose.screen.configuration.NewProfileScreen
 import io.nekohasekai.sfa.compose.screen.connections.ConnectionDetailsRoute
@@ -149,9 +150,8 @@ fun NavHost(
         }
 
         composable(A2MRoutes.SERVERS) {
-            A2MPlaceholderScreen(
-                title = "Serveurs",
-                subtitle = "Gestion des serveurs A2M TUN",
+            A2MServersScreen(
+                dashboardViewModel = dashboardViewModel ?: viewModel(),
                 modifier = Modifier.fillMaxSize(),
             )
         }
