@@ -158,7 +158,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private const val A2M_TUN_HOME_ROUTE = "am_home"
+private const val A2M_TUN_HOME_ROUTE = "a2m/home"
+private const val A2M_TUN_ROUTE_PREFIX = "a2m/"
 
 class MainActivity :
     AppCompatActivity(),
@@ -1308,7 +1309,7 @@ class MainActivity :
                     bottomBar = {
                         if (!isSubScreen) {
                             val hasUpdate by UpdateState.hasUpdate
-                            if (currentRoute == A2M_TUN_HOME_ROUTE) {
+                            if (currentRoute?.startsWith(A2M_TUN_ROUTE_PREFIX) == true) {
                                 A2MNavigationBar(
                                     selectedRoute = currentRoute,
                                     onNavigate = { route ->

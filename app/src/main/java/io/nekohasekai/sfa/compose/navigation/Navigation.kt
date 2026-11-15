@@ -12,6 +12,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import io.nekohasekai.sfa.compose.screen.am.A2MPlaceholderScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MTUNHomeScreen
 import io.nekohasekai.sfa.compose.screen.configuration.NewProfileScreen
 import io.nekohasekai.sfa.compose.screen.connections.ConnectionDetailsRoute
@@ -112,7 +113,7 @@ fun NavHost(
 ) {
     androidx.navigation.compose.NavHost(
         navController = navController,
-        startDestination = "am_home",
+        startDestination = A2MRoutes.HOME,
         modifier = modifier,
     ) {
         composable(Screen.Dashboard.route) {
@@ -134,7 +135,7 @@ fun NavHost(
             }
         }
 
-        composable("am_home") {
+        composable(A2MRoutes.HOME) {
             A2MTUNHomeScreen(
                 serviceStatus = serviceStatus,
                 dashboardViewModel = dashboardViewModel ?: viewModel(),
@@ -143,6 +144,38 @@ fun NavHost(
                         launchSingleTop = true
                     }
                 },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.SERVERS) {
+            A2MPlaceholderScreen(
+                title = "Serveurs",
+                subtitle = "Gestion des serveurs A2M TUN",
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.ROUTING) {
+            A2MPlaceholderScreen(
+                title = "Routage",
+                subtitle = "Routage A2M TUN",
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.SETTINGS) {
+            A2MPlaceholderScreen(
+                title = "Réglages",
+                subtitle = "Paramètres A2M TUN",
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.JOURNAL) {
+            A2MPlaceholderScreen(
+                title = "Journal",
+                subtitle = "Journal A2M TUN",
                 modifier = Modifier.fillMaxSize(),
             )
         }

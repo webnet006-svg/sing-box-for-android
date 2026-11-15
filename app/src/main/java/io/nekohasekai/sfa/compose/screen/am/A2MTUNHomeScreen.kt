@@ -58,7 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.nekohasekai.sfa.compose.base.GlobalEventBus
 import io.nekohasekai.sfa.compose.base.UiEvent
-import io.nekohasekai.sfa.compose.navigation.Screen
+import io.nekohasekai.sfa.compose.navigation.A2MRoutes
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardUiState
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardViewModel
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
@@ -70,7 +70,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-private const val A2M_HOME_ROUTE = "am_home"
+private const val A2M_HOME_ROUTE = "a2m/home"
 private const val A2M_IP_API_URL = "https://api.ipify.org?format=json"
 
 private val A2M_BG_TOP = Color(0xFF02091A)
@@ -277,27 +277,33 @@ fun A2MTUNHomeScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 A2MNavigationSheetItem(
                     label = "Accueil",
-                    route = A2M_HOME_ROUTE,
-                    selectedRoute = A2M_HOME_ROUTE,
-                    onClick = { showMenu = false; onNavigate(A2M_HOME_ROUTE) },
+                    route = A2MRoutes.HOME,
+                    selectedRoute = A2MRoutes.HOME,
+                    onClick = { showMenu = false; onNavigate(A2MRoutes.HOME) },
                 )
                 A2MNavigationSheetItem(
                     label = "Serveurs",
-                    route = Screen.Dashboard.route,
-                    selectedRoute = Screen.Dashboard.route,
-                    onClick = { showMenu = false; onNavigate(Screen.Dashboard.route) },
+                    route = A2MRoutes.SERVERS,
+                    selectedRoute = A2MRoutes.SERVERS,
+                    onClick = { showMenu = false; onNavigate(A2MRoutes.SERVERS) },
+                )
+                A2MNavigationSheetItem(
+                    label = "Routage",
+                    route = A2MRoutes.ROUTING,
+                    selectedRoute = A2MRoutes.ROUTING,
+                    onClick = { showMenu = false; onNavigate(A2MRoutes.ROUTING) },
                 )
                 A2MNavigationSheetItem(
                     label = "Journal",
-                    route = Screen.Log.route,
-                    selectedRoute = Screen.Log.route,
-                    onClick = { showMenu = false; onNavigate(Screen.Log.route) },
+                    route = A2MRoutes.JOURNAL,
+                    selectedRoute = A2MRoutes.JOURNAL,
+                    onClick = { showMenu = false; onNavigate(A2MRoutes.JOURNAL) },
                 )
                 A2MNavigationSheetItem(
-                    label = "Paramètres",
-                    route = Screen.Settings.route,
-                    selectedRoute = Screen.Settings.route,
-                    onClick = { showMenu = false; onNavigate(Screen.Settings.route) },
+                    label = "Réglages",
+                    route = A2MRoutes.SETTINGS,
+                    selectedRoute = A2MRoutes.SETTINGS,
+                    onClick = { showMenu = false; onNavigate(A2MRoutes.SETTINGS) },
                 )
             }
         }
