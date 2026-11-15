@@ -4,7 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,9 +40,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -65,6 +66,7 @@ import io.nekohasekai.sfa.constant.Status
 import io.nekohasekai.sfa.utils.HTTPClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
@@ -106,6 +108,7 @@ fun A2MTUNHomeScreen(
 ) {
     val uiState by dashboardViewModel.uiState.collectAsState()
     val scaffoldPadding = LocalScaffoldPadding.current
+    val coroutineScope = rememberCoroutineScope()
 
     var exitIp by remember { mutableStateOf<String?>(null) }
     var isRefreshingIp by remember { mutableStateOf(false) }
@@ -237,9 +240,11 @@ fun A2MTUNHomeScreen(
                     exitIp = exitIp,
                     isRefreshing = isRefreshingIp,
                     onRefresh = {
-                        isRefreshingIp = true
-                        exitIp = fetchExitIp()
-                        isRefreshingIp = false
+                        coroutineScope.launch {
+                            isRefreshingIp = true
+                            exitIp = fetchExitIp()
+                            isRefreshingIp = false
+                        }
                     },
                 )
             }
