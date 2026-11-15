@@ -12,8 +12,10 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import io.nekohasekai.sfa.compose.screen.am.A2MPlaceholderScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MJournalScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MRoutingScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MServersScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MSettingsScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MTUNHomeScreen
 import io.nekohasekai.sfa.compose.screen.configuration.NewProfileScreen
 import io.nekohasekai.sfa.compose.screen.connections.ConnectionDetailsRoute
@@ -157,25 +159,23 @@ fun NavHost(
         }
 
         composable(A2MRoutes.ROUTING) {
-            A2MPlaceholderScreen(
-                title = "Routage",
-                subtitle = "Routage A2M TUN",
+            A2MRoutingScreen(
+                serviceStatus = serviceStatus,
+                dashboardViewModel = dashboardViewModel ?: viewModel(),
                 modifier = Modifier.fillMaxSize(),
             )
         }
 
         composable(A2MRoutes.SETTINGS) {
-            A2MPlaceholderScreen(
-                title = "Réglages",
-                subtitle = "Paramètres A2M TUN",
+            A2MSettingsScreen(
+                serviceStatus = serviceStatus,
                 modifier = Modifier.fillMaxSize(),
             )
         }
 
         composable(A2MRoutes.JOURNAL) {
-            A2MPlaceholderScreen(
-                title = "Journal",
-                subtitle = "Journal A2M TUN",
+            A2MJournalScreen(
+                serviceStatus = serviceStatus,
                 modifier = Modifier.fillMaxSize(),
             )
         }

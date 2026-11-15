@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import io.nekohasekai.sfa.bg.BoxService
 import io.nekohasekai.sfa.compose.base.GlobalEventBus
 import io.nekohasekai.sfa.compose.base.UiEvent
 import io.nekohasekai.sfa.compose.navigation.A2MRoutes
@@ -114,6 +115,7 @@ fun A2MTUNHomeScreen(
     var isRefreshingIp by remember { mutableStateOf(false) }
     var selectedProtocol by remember { mutableStateOf<String?>(null) }
     var toastMessage by remember { mutableStateOf<String?>(null) }
+    var connectionError by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(serviceStatus) {
@@ -144,20 +146,28 @@ fun A2MTUNHomeScreen(
         GlobalEventBus.events.collect { event ->
             if (event is UiEvent.ErrorMessage) {
                 toastMessage = event.message
+                connectionError = true
             }
         }
     }
 
     val connectLabel =
-        when (serviceStatus) {
-            Status.Stopped -> "CONNECTER"
-            Status.Starting -> "CONNEXION EN COURS"
-            Status.Started -> "CONNECTÉ"
-            Status.Stopping -> "DÉCONNECTION"
+        when {
+            connectionError && serviceStatus == Status.Stopped -> "ÉCHEC DE CONNEXION"
+            serviceStatus == Status.Stopped -> "CONNECTER"
+            serviceStatus == Status.Starting -> "CONNEXION EN COURS"
+            serviceStatus == Status.Started -> "CONNECTÉ"
+            else -> "DÉCONNEXION"
         }
     val isConnected = serviceStatus == Status.Started
     val isBusy = serviceStatus == Status.Starting || serviceStatus == Status.Stopping
-    val hint = if (isConnected) "Appuyez pour arrêter le tunnel" else "Appuyez pour démarrer le tunnel"
+    val hint =
+        when {
+            connectionError && serviceStatus == Status.Stopped ->
+                "Vérifiez le serveur sélectionné puis réessayez"
+            isConnected -> "Appuyez pour arrêter le tunnel"
+            else -> "Appuyez pour démarrer le tunnel"
+        }
 
     Box(
         modifier =
@@ -216,7 +226,12 @@ fun A2MTUNHomeScreen(
                             label = connectLabel,
                             isBusy = isBusy,
                             onClick = {
-                                dashboardViewModel.toggleService()
+                                connectionError = false
+                                when (serviceStatus) {
+                                    Status.Stopped -> GlobalEventBus.tryEmit(UiEvent.RequestStartService)
+                                    Status.Starting, Status.Started -> BoxService.stop()
+                                    else -> Unit
+                                }
                             },
                         )
                     }

@@ -274,6 +274,9 @@ class MainActivity :
         if (intent.categories?.contains("de.robv.android.xposed.category.MODULE_SETTINGS") == true) {
             pendingNavigationRoute.value = "settings/privilege"
         }
+        intent.getStringExtra("a2m_route")?.let { route ->
+            pendingNavigationRoute.value = route
+        }
         val uri = intent.data ?: return
         if (uri.scheme == "sing-box") {
             val target = if (uri.isOpaque) Uri.parse("sing-box://" + uri.schemeSpecificPart) else uri
@@ -290,12 +293,31 @@ class MainActivity :
             return
         }
         if (uri.scheme == "sing-box" && uri.host == "import-remote-profile") {
-            try {
-                val profile = Libbox.parseRemoteProfileImportLink(uri.toString())
-                pendingImportProfile = Triple(profile.name, profile.host, profile.url)
-                showImportProfileDialog = true
-            } catch (e: Exception) {
-                pendingIntentErrorMessage = e.message ?: "Failed to parse profile link"
+            // A2M TUN : import direct de l'abonnement, sans fenêtre Sing-box.
+            val url = uri.getQueryParameter("url")
+            if (url.isNullOrBlank()) {
+                pendingIntentErrorMessage = "Lien d'abonnement invalide"
+                return
+            }
+            lifecycleScope.launch(Dispatchers.IO) {
+                val importer = io.nekohasekai.sfa.dams.importer.ClipboardImporter(this@MainActivity)
+                when (val outcome = importer.importSubscription(url, asRemote = true)) {
+                    is io.nekohasekai.sfa.dams.importer.ClipboardImporter.Outcome.Success -> {
+                        withContext(Dispatchers.Main) {
+                            pendingNavigationRoute.value = "a2m/servers"
+                            android.widget.Toast.makeText(
+                                this@MainActivity,
+                                "Abonnement importé",
+                                android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    }
+                    is io.nekohasekai.sfa.dams.importer.ClipboardImporter.Outcome.Error -> {
+                        withContext(Dispatchers.Main) {
+                            pendingIntentErrorMessage = outcome.message
+                        }
+                    }
+                }
             }
             return
         }
@@ -303,20 +325,24 @@ class MainActivity :
         if (intent.action == Intent.ACTION_VIEW &&
             (uri.scheme == ContentResolver.SCHEME_CONTENT || uri.scheme == ContentResolver.SCHEME_FILE)
         ) {
+            // A2M TUN : import direct vers le gestionnaire de serveurs, sans dialogue Sing-box.
             parseImportLocalProfileJob?.cancel()
             parseImportLocalProfileJob =
                 lifecycleScope.launch(Dispatchers.IO) {
                     val importHandler = ProfileImportHandler(this@MainActivity)
-                    when (val result = importHandler.parseUri(uri)) {
-                        is ProfileImportHandler.UriParseResult.Success -> {
+                    when (val result = importHandler.importFromUri(uri)) {
+                        is ProfileImportHandler.ImportResult.Success -> {
                             withContext(Dispatchers.Main) {
-                                pendingImportLocalProfileName = result.name
-                                pendingImportLocalProfileUri = uri
-                                showImportLocalProfileDialog = true
+                                pendingNavigationRoute.value = "a2m/servers"
+                                android.widget.Toast.makeText(
+                                    this@MainActivity,
+                                    "Serveur importé : ${result.profile.name}",
+                                    android.widget.Toast.LENGTH_SHORT,
+                                ).show()
                             }
                         }
 
-                        is ProfileImportHandler.UriParseResult.Error -> {
+                        is ProfileImportHandler.ImportResult.Error -> {
                             withContext(Dispatchers.Main) {
                                 pendingIntentErrorMessage = result.message
                             }
@@ -640,143 +666,6 @@ class MainActivity :
             )
         }
 
-        // Handle update check prompt dialog (shown only once on first launch)
-        var showUpdateCheckPrompt by remember { mutableStateOf(!Settings.updateCheckPrompted) }
-        if (showUpdateCheckPrompt) {
-            AlertDialog(
-                onDismissRequest = {
-                    Settings.updateCheckPrompted = true
-                    showUpdateCheckPrompt = false
-                },
-                title = { Text(stringResource(R.string.check_update)) },
-                text = {
-                    MarkdownText(
-                        markdown = stringResource(
-                            if (BuildConfig.FLAVOR == "play") {
-                                R.string.check_update_prompt_play
-                            } else {
-                                R.string.check_update_prompt_github
-                            },
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        Settings.updateCheckPrompted = true
-                        Settings.checkUpdateEnabled = true
-                        showUpdateCheckPrompt = false
-                        scope.launch(Dispatchers.IO) {
-                            try {
-                                val result = Vendor.checkUpdateAsync()
-                                UpdateState.setUpdate(result)
-                            } catch (_: Exception) {
-                                UpdateState.setUpdate(null)
-                            }
-                        }
-                    }) {
-                        Text(stringResource(R.string.ok))
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = {
-                        Settings.updateCheckPrompted = true
-                        showUpdateCheckPrompt = false
-                    }) {
-                        Text(stringResource(R.string.no_thanks))
-                    }
-                },
-            )
-        }
-
-        // Handle update available dialog
-        val updateInfo by UpdateState.updateInfo
-        val shouldShowUpdateDialog = updateInfo != null &&
-            updateInfo!!.versionCode > Settings.lastShownUpdateVersion
-        var showUpdateDialog by remember { mutableStateOf(true) }
-
-        // Download dialog state
-        var showDownloadDialog by remember { mutableStateOf(false) }
-        var downloadJob by remember { mutableStateOf<Job?>(null) }
-        var downloadError by remember { mutableStateOf<String?>(null) }
-
-        if (showUpdateDialog && shouldShowUpdateDialog) {
-            UpdateAvailableDialog(
-                updateInfo = updateInfo!!,
-                onDismiss = {
-                    Settings.lastShownUpdateVersion = updateInfo!!.versionCode
-                    showUpdateDialog = false
-                },
-                onUpdate = {
-                    showDownloadDialog = true
-                    downloadError = null
-                    downloadJob = scope.launch {
-                        try {
-                            withContext(Dispatchers.IO) {
-                                Vendor.downloadAndInstall(
-                                    this@MainActivity,
-                                    updateInfo!!.downloadUrl,
-                                )
-                            }
-                            showDownloadDialog = false
-                        } catch (e: Exception) {
-                            downloadError = e.message
-                        }
-                    }
-                },
-            )
-        }
-
-        // Download progress dialog
-        if (showDownloadDialog) {
-            AlertDialog(
-                onDismissRequest = {},
-                title = { Text(stringResource(R.string.update)) },
-                text = {
-                    Column {
-                        if (downloadError != null) {
-                            Text(
-                                downloadError!!,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        } else {
-                            val progress by UpdateState.downloadProgress
-                            val progressValue = progress
-                            Column {
-                                if (progressValue != null) {
-                                    Text("${stringResource(R.string.downloading)} ${(progressValue * 100).toInt()}%")
-                                } else {
-                                    Text(stringResource(R.string.downloading))
-                                }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                if (progressValue != null) {
-                                    LinearProgressIndicator(
-                                        progress = { progressValue },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                } else {
-                                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            downloadJob?.cancel()
-                            downloadJob = null
-                            showDownloadDialog = false
-                            downloadError = null
-                            UpdateState.downloadProgress.value = null
-                        },
-                    ) {
-                        Text(stringResource(if (downloadError != null) R.string.ok else android.R.string.cancel))
-                    }
-                },
-            )
-        }
-
         val remoteServer by RemoteControlManager.remoteServer.collectAsState()
         val remoteConnected by RemoteControlManager.isConnected.collectAsState()
         val remoteStartedAt by RemoteControlManager.startedAt.collectAsState()
@@ -1069,7 +958,7 @@ class MainActivity :
                             )
                         } else {
                             ServiceStatusBar(
-                                visible = showStatusBar && !isSubScreen,
+                                visible = showStatusBar && !isSubScreen && currentRoute?.startsWith(A2M_TUN_ROUTE_PREFIX) != true,
                                 serviceStatus = currentServiceStatus,
                                 startTime = dashboardUiState.serviceStartTime,
                                 groupsCount = dashboardUiState.groupsCount,

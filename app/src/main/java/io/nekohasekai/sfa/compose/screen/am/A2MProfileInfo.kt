@@ -4,6 +4,7 @@ import io.nekohasekai.sfa.database.Profile
 import io.nekohasekai.sfa.database.TypedProfile
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -62,6 +63,17 @@ internal object A2MProfileInfo {
             TypedProfile.Type.Remote -> "Abonnement"
             TypedProfile.Type.Local -> "Configuration"
         }
+
+    /** Serveurs DNS réellement déclarés dans la configuration (lecture seule). */
+    fun dnsServers(profile: Profile): List<String> =
+        runCatching {
+            val root = json.parseToJsonElement(File(profile.typed.path).readText()).jsonObject
+            val servers = root["dns"]?.jsonObject?.get("servers")?.jsonArray ?: return@runCatching emptyList()
+            servers.mapNotNull { element ->
+                (element as? JsonPrimitive)?.contentOrNull
+                    ?: (element as? JsonObject)?.get("server")?.jsonPrimitive?.contentOrNull
+            }
+        }.getOrDefault(emptyList())
 
     private fun fallback(profile: Profile): String = typeLabel(profile)
 }

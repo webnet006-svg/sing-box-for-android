@@ -2,6 +2,7 @@ package io.nekohasekai.sfa.compose
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -54,6 +55,7 @@ import io.nekohasekai.sfa.bg.ServiceConnection
 import io.nekohasekai.sfa.compose.base.GlobalEventBus
 import io.nekohasekai.sfa.compose.base.SelectableMessageDialog
 import io.nekohasekai.sfa.compose.base.UiEvent
+import io.nekohasekai.sfa.compose.screen.configuration.ProfileImportHandler
 import io.nekohasekai.sfa.compose.screen.tools.TaildropSendFile
 import io.nekohasekai.sfa.compose.screen.tools.TaildropSendManager
 import io.nekohasekai.sfa.compose.screen.tools.TaildropSendProgress
@@ -63,6 +65,7 @@ import io.nekohasekai.sfa.compose.screen.tools.TailscaleStatusViewModel
 import io.nekohasekai.sfa.compose.theme.Theme
 import io.nekohasekai.sfa.constant.Alert
 import io.nekohasekai.sfa.constant.Status
+import io.nekohasekai.sfa.dams.importer.ClipboardImporter
 import io.nekohasekai.sfa.database.Settings
 import io.nekohasekai.sfa.utils.RemoteControlManager
 import kotlinx.coroutines.CancellationException
@@ -88,6 +91,9 @@ class ShareActivity :
         sendID = savedInstanceState?.getLong(STATE_SEND_ID) ?: -1L
         lifecycleScope.launch {
             Settings.dataStore.initialize()
+            if (handleSharedForImport(intent)) {
+                return@launch
+            }
             if (sendID == -1L) {
                 var openedFiles = emptyList<TaildropSendFile>()
                 try {
@@ -123,6 +129,61 @@ class ShareActivity :
                 }
             }
         }
+    }
+
+    /**
+     * A2M TUN : tout contenu partagé (texte/lien ou fichier de configuration) est
+     * transmis au gestionnaire d'importation réel. Les fichiers qui ne sont pas des
+     * configurations continuent vers le partage Taildrop existant.
+     */
+    private suspend fun handleSharedForImport(intent: Intent?): Boolean {
+        if (intent == null) return false
+        if (intent.action != Intent.ACTION_SEND && intent.action != Intent.ACTION_SEND_MULTIPLE) {
+            return false
+        }
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+        if (!text.isNullOrBlank()) {
+            val message =
+                when (val outcome = ClipboardImporter(this).importText(text)) {
+                    is ClipboardImporter.Outcome.Success ->
+                        "Serveur importé (${outcome.result.profiles.size})"
+                    is ClipboardImporter.Outcome.Error -> outcome.message
+                }
+            withContext(Dispatchers.Main) {
+                Toast.makeText(this@ShareActivity, message, Toast.LENGTH_LONG).show()
+                startActivity(
+                    Intent(this@ShareActivity, MainActivity::class.java)
+                        .putExtra("a2m_route", "a2m/servers"),
+                )
+                finish()
+            }
+            return true
+        }
+        val stream = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+        if (stream != null) {
+            val handler = ProfileImportHandler(this)
+            when (handler.parseUri(stream)) {
+                is ProfileImportHandler.UriParseResult.Success -> {
+                    val message =
+                        when (val outcome = handler.importFromUri(stream)) {
+                            is ProfileImportHandler.ImportResult.Success ->
+                                "Serveur importé : ${outcome.profile.name}"
+                            is ProfileImportHandler.ImportResult.Error -> outcome.message
+                        }
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@ShareActivity, message, Toast.LENGTH_LONG).show()
+                        startActivity(
+                            Intent(this@ShareActivity, MainActivity::class.java)
+                                .putExtra("a2m_route", "a2m/servers"),
+                        )
+                        finish()
+                    }
+                    return true
+                }
+                is ProfileImportHandler.UriParseResult.Error -> return false
+            }
+        }
+        return false
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
