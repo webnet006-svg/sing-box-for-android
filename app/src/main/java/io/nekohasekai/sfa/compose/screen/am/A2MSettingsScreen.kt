@@ -61,7 +61,6 @@ import io.nekohasekai.sfa.compose.screen.dashboard.DashboardViewModel
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
 import io.nekohasekai.sfa.constant.Status
 import io.nekohasekai.sfa.database.Settings
-import io.nekohasekai.sfa.ui.UiEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.provider.Settings as AndroidSettings

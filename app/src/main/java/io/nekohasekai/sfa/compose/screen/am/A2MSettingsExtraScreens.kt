@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Icon
@@ -28,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -36,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.sfa.BuildConfig
 import io.nekohasekai.sfa.compose.base.rememberApplyServiceChangeNotifier
@@ -351,12 +356,13 @@ fun A2MAboutScreen(
 ) {
     val scaffoldPadding = LocalScaffoldPadding.current
     val coreVersion = remember { runCatching { Libbox.version() }.getOrDefault("—") }
-    val serviceMode =
-        remember {
-            runCatching {
-                Settings.detectServiceMode()
-            }.getOrDefault(ServiceMode.VPN)
-        }
+    var serviceMode by remember { mutableStateOf(ServiceMode.VPN) }
+    LaunchedEffect(Unit) {
+        serviceMode =
+            withContext(Dispatchers.IO) {
+                runCatching { Settings.detectServiceMode() }.getOrDefault(ServiceMode.VPN)
+            }
+    }
 
     Column(
         modifier =

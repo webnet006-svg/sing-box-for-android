@@ -499,8 +499,9 @@ class MainActivity :
         }
 
         // Mode « Système » : suit la configuration claire/sombre d'Android.
+        val isSystemDark = isSystemInDarkTheme()
         SideEffect {
-            io.nekohasekai.sfa.compose.screen.am.A2MThemeState.applySystemDark(isSystemInDarkTheme())
+            io.nekohasekai.sfa.compose.screen.am.A2MThemeState.applySystemDark(isSystemDark)
         }
 
         val scope = rememberCoroutineScope()
