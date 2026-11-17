@@ -32,6 +32,8 @@ import io.nekohasekai.sfa.compose.MainActivity
 import io.nekohasekai.sfa.constant.Action
 import io.nekohasekai.sfa.constant.Alert
 import io.nekohasekai.sfa.constant.Status
+import io.nekohasekai.sfa.compose.base.GlobalEventBus
+import io.nekohasekai.sfa.compose.base.UiEvent
 import io.nekohasekai.sfa.database.ProfileManager
 import io.nekohasekai.sfa.database.Settings
 import io.nekohasekai.sfa.ktx.hasPermission
@@ -148,26 +150,51 @@ class BoxService(private val service: Service, private val platformInterface: Pl
 
             DefaultNetworkMonitor.start()
 
+            // Validation préalable de la configuration (échec propre avant tout démarrage).
             try {
-                commandServer.startOrReloadService(
-                    content,
-                    OverrideOptions().apply {
-                        autoRedirect = Settings.autoRedirect
-                        if (Vendor.isPerAppProxyAvailable() && Settings.perAppProxyEnabled) {
-                            val appList = Settings.getEffectivePerAppProxyList()
-                            if (Settings.getEffectivePerAppProxyMode() == Settings.PER_APP_PROXY_INCLUDE) {
-                                includePackage =
-                                    PlatformInterfaceWrapper.StringArray((appList + Application.application.packageName).iterator())
-                            } else {
-                                excludePackage =
-                                    PlatformInterfaceWrapper.StringArray((appList - Application.application.packageName).iterator())
-                            }
-                        }
-                    },
-                )
+                Libbox.checkConfig(content)
             } catch (e: Exception) {
                 stopAndAlert(Alert.CreateService, e.message)
                 return
+            }
+
+            val serviceOverride =
+                OverrideOptions().apply {
+                    autoRedirect = Settings.autoRedirect
+                    if (Vendor.isPerAppProxyAvailable() && Settings.perAppProxyEnabled) {
+                        val appList = Settings.getEffectivePerAppProxyList()
+                        if (Settings.getEffectivePerAppProxyMode() == Settings.PER_APP_PROXY_INCLUDE) {
+                            includePackage =
+                                PlatformInterfaceWrapper.StringArray((appList + Application.application.packageName).iterator())
+                        } else {
+                            excludePackage =
+                                PlatformInterfaceWrapper.StringArray((appList - Application.application.packageName).iterator())
+                        }
+                    }
+                }
+
+            try {
+                commandServer.startOrReloadService(content, serviceOverride)
+            } catch (e: Exception) {
+                // Filet de sécurité : noyau compilé sans gVisor + profil demandant gVisor/mixed
+                // => réécriture de la pile TUN en "system" et nouvelle tentative unique.
+                val fallbackContent = buildStackFallbackContent(content, e.message)
+                if (fallbackContent == null) {
+                    stopAndAlert(Alert.CreateService, e.message)
+                    return
+                }
+                Log.w(TAG, "gVisor stack unavailable, retrying with system stack")
+                try {
+                    commandServer.startOrReloadService(fallbackContent, serviceOverride)
+                    GlobalEventBus.tryEmit(
+                        UiEvent.ErrorMessage(
+                            "Pile réseau « gVisor » indisponible dans ce noyau : tunnel démarré avec la pile système.",
+                        ),
+                    )
+                } catch (retryError: Exception) {
+                    stopAndAlert(Alert.CreateService, retryError.message)
+                    return
+                }
             }
 
             if (commandServer.needWIFIState()) {
@@ -192,6 +219,34 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             stopAndAlert(Alert.StartService, e.message)
             return
         }
+    }
+
+    /**
+     * Filet de sécurité pour un noyau compilé sans `with_gvisor` :
+     * si l'erreur indique une fonctionnalité absente du build et que la configuration
+     * demande la pile gVisor/mixed pour l'inbound TUN, renvoie une copie de la
+     * configuration avec `"stack": "system"`, sinon null.
+     */
+    private fun buildStackFallbackContent(content: String, cause: String?): String? {
+        if (cause == null || !cause.contains("not included in this build", ignoreCase = true)) {
+            return null
+        }
+        return runCatching {
+            val root = org.json.JSONObject(content)
+            val inbounds = root.optJSONArray("inbounds") ?: return@runCatching null
+            var changed = false
+            for (i in 0 until inbounds.length()) {
+                val inbound = inbounds.optJSONObject(i) ?: continue
+                if (inbound.optString("type") != "tun") continue
+                when (inbound.optString("stack")) {
+                    "gvisor", "mixed" -> {
+                        inbound.put("stack", "system")
+                        changed = true
+                    }
+                }
+            }
+            if (changed) root.toString() else null
+        }.getOrNull()
     }
 
     override fun serviceStop() {

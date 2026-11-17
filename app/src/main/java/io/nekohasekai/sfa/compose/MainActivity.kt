@@ -1495,7 +1495,7 @@ class MainActivity :
                 Alert.RequestVPNPermission -> stringResource(R.string.error_missing_vpn_permission)
                 Alert.RequestNotificationPermission -> stringResource(R.string.notification_permission_required_description)
                 Alert.EmptyConfiguration -> stringResource(R.string.error_empty_configuration)
-                else -> message
+                else -> friendlyServiceMessage(message)
             }
 
         AlertDialog(
@@ -1508,6 +1508,24 @@ class MainActivity :
                 }
             },
         )
+    }
+
+    /**
+     * Traduit les erreurs brutes du noyau Go en messages compréhensibles.
+     * Les erreurs inconnues restent affichées telles quelles (utile pour le diagnostic).
+     */
+    private fun friendlyServiceMessage(message: String?): String? {
+        if (message.isNullOrBlank()) return null
+        val lower = message.lowercase()
+        return when {
+            lower.contains("gvisor") && lower.contains("not included") ->
+                "La configuration du tunnel demande la pile réseau « gVisor », absente de cette version du noyau. " +
+                    "Le tunnel peut avoir redémarré avec la pile système. Si le problème persiste, mettez à jour l'application."
+            lower.contains("not included in this build") ->
+                "La configuration du tunnel demande une fonctionnalité absente de cette version du noyau. " +
+                    "Mettez à jour l'application ou modifiez le profil concerné."
+            else -> message
+        }
     }
 
     @Composable
