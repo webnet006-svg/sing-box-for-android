@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -271,12 +272,22 @@ fun A2MSettingsScreen(
                         tileColor = Color(0xFF2EAF6F),
                         title = "DNS",
                         subtitle =
-                        if (dnsServers.isEmpty()) {
+                        if (io.nekohasekai.sfa.database.Settings.dnsOverrideEnabled) {
+                            "Personnalisé · ${io.nekohasekai.sfa.database.Settings.dnsRemoteServer}"
+                        } else if (dnsServers.isEmpty()) {
                             "Aucun serveur déclaré"
                         } else {
                             "${dnsServers.first()}${if (dnsServers.size > 1) " + ${dnsServers.size - 1} autre(s)" else ""}"
                         },
                         onClick = { onNavigate(A2MRoutes.SETTINGS_DNS) },
+                    )
+                    HorizontalDivider(color = A2MColors.CardBorder)
+                    SettingTileRow(
+                        icon = Icons.Filled.Tune,
+                        tileColor = Color(0xFFE8A13A),
+                        title = "Moteur réseau",
+                        subtitle = "MTU · Pile TUN · Multiplexage · Journal",
+                        onClick = { onNavigate(A2MRoutes.SETTINGS_ENGINE) },
                     )
                     HorizontalDivider(color = A2MColors.CardBorder)
                     SettingTileRow(

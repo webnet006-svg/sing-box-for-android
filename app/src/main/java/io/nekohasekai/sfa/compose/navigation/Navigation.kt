@@ -17,6 +17,7 @@ import io.nekohasekai.sfa.compose.screen.am.A2MRoutingScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MServersScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsConnectionScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsDnsScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MSettingsEngineScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MTUNHomeScreen
 import io.nekohasekai.sfa.compose.screen.configuration.NewProfileScreen
@@ -191,7 +192,16 @@ fun NavHost(
 
         composable(A2MRoutes.SETTINGS_DNS) {
             A2MSettingsDnsScreen(
+                serviceStatus = serviceStatus,
                 dashboardViewModel = dashboardViewModel ?: viewModel(),
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.SETTINGS_ENGINE) {
+            A2MSettingsEngineScreen(
+                serviceStatus = serviceStatus,
                 onBack = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
             )

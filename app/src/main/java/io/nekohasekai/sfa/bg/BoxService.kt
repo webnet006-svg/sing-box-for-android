@@ -230,13 +230,43 @@ class BoxService(private val service: Service, private val platformInterface: Pl
      * demande la pile gVisor/mixed pour l'inbound TUN, renvoie une copie de la
      * configuration avec `"stack": "system"`, sinon null.
      */
-    /** Contenu effectivement chargé : config du profil + décorations A2M (bloqueur de pubs). */
-    private fun effectiveContent(raw: String): String =
-        if (Settings.adBlockEnabled) {
-            A2MConfigDecorations.withAdBlock(raw)
-        } else {
-            raw
-        }
+    /** Contenu effectivement chargé : config du profil + décorations A2M (LAN, DNS, moteur, pub). */
+    private fun effectiveContent(raw: String): String {
+        val dnsOverride =
+            if (Settings.dnsOverrideEnabled) {
+                A2MConfigDecorations.DnsOverride(
+                    type = Settings.dnsRemoteType,
+                    remoteServer = Settings.dnsRemoteServer.trim(),
+                    bootstrapServer = Settings.dnsBootstrapServer.trim(),
+                )
+            } else {
+                null
+            }
+        val engineNeedsApplying =
+            Settings.engineMtuMode != "auto" ||
+                Settings.engineStackMode != "auto" ||
+                Settings.engineMuxEnabled ||
+                Settings.engineLogLevel != "auto"
+        val engine =
+            if (engineNeedsApplying) {
+                A2MConfigDecorations.EngineOptions(
+                    mtuMode = Settings.engineMtuMode,
+                    mtuCustom = Settings.engineMtuCustom,
+                    stackMode = Settings.engineStackMode,
+                    muxEnabled = Settings.engineMuxEnabled,
+                    logLevel = Settings.engineLogLevel,
+                )
+            } else {
+                null
+            }
+        return A2MConfigDecorations.decorate(
+            raw = raw,
+            bypassPrivate = Settings.bypassPrivateNetworks,
+            dns = dnsOverride,
+            engine = engine,
+            adBlock = Settings.adBlockEnabled,
+        )
+    }
 
     private fun buildStackFallbackContent(content: String, cause: String?): String? {
         if (cause == null || !cause.contains("not included in this build", ignoreCase = true)) {

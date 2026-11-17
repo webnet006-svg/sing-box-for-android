@@ -726,7 +726,8 @@ class MainActivity :
 
         val isA2MSubScreen =
             currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_CONNECTION ||
-                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_DNS
+                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_DNS ||
+                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_ENGINE
         val isSubScreen = isSettingsSubScreen || isToolsSubScreen || isConnectionsDetail || isProfileRoute || isA2MSubScreen
         // Get LogViewModel instance if we're on the Log screen
         val logViewModel: LogViewModel? =

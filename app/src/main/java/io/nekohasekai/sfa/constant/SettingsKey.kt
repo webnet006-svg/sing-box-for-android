@@ -66,4 +66,16 @@ object SettingsKey {
     const val CACHED_UPDATE_INFO = "cached_update_info"
     const val CACHED_APK_PATH = "cached_apk_path"
     const val LAST_SHOWN_UPDATE_VERSION = "last_shown_update_version"
+
+    // A2M TUN — décorations de configuration réelles
+    const val DNS_OVERRIDE_ENABLED = "dns_override_enabled"
+    const val DNS_REMOTE_TYPE = "dns_remote_type"
+    const val DNS_REMOTE_SERVER = "dns_remote_server"
+    const val DNS_BOOTSTRAP_SERVER = "dns_bootstrap_server"
+    const val ENGINE_MTU_MODE = "engine_mtu_mode"
+    const val ENGINE_MTU_CUSTOM = "engine_mtu_custom"
+    const val ENGINE_STACK_MODE = "engine_stack_mode"
+    const val ENGINE_MUX_ENABLED = "engine_mux_enabled"
+    const val ENGINE_LOG_LEVEL = "engine_log_level"
+    const val BYPASS_PRIVATE_NETWORKS = "bypass_private_networks"
 }

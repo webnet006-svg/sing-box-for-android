@@ -128,6 +128,7 @@ fun A2MRoutingScreen(
 
     var perAppEnabled by remember { mutableStateOf(Settings.perAppProxyEnabled) }
     var perAppMode by remember { mutableStateOf(Settings.perAppProxyMode) }
+    var bypassPrivate by remember { mutableStateOf(Settings.bypassPrivateNetworks) }
     var serviceMode by remember { mutableStateOf(Settings.serviceMode) }
     var showPrivilegeDialog by remember { mutableStateOf(false) }
     var showAppPicker by remember { mutableStateOf(false) }
@@ -232,64 +233,53 @@ fun A2MRoutingScreen(
             }
 
             item {
-                SectionCard(title = "Sortie par application") {
+                SectionCard(title = "Routage par application") {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(
-                                    text = "Activer le routage par application",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = A2MColors.Text,
-                                )
-                                Text(
-                                    text =
-                                    if (privilegeAvailable) {
-                                        "Nécessite un redémarrage du tunnel"
-                                    } else {
-                                        "Nécessite Shizuku ou l'accès root"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = A2MColors.Muted,
-                                )
-                            }
-                            Switch(
-                                checked = perAppEnabled,
-                                onCheckedChange = { enabled ->
-                                    if (enabled && !privilegeAvailable) {
-                                        showPrivilegeDialog = true
-                                    } else {
-                                        perAppEnabled = enabled
-                                        Settings.perAppProxyEnabled = enabled
-                                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
-                                    }
-                                },
-                            )
-                        }
-
+                        A2MRadioCard(
+                            title = "Toutes les applications",
+                            subtitle = "Chaque application passe par le VPN.",
+                            selected = !perAppEnabled,
+                            onClick = {
+                                if (perAppEnabled) {
+                                    perAppEnabled = false
+                                    Settings.perAppProxyEnabled = false
+                                    notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
+                                }
+                            },
+                        )
+                        A2MRadioCard(
+                            title = "VPN pour ces applications",
+                            subtitle = "Les autres applications se connectent en direct.",
+                            selected = perAppEnabled && perAppMode == Settings.PER_APP_PROXY_INCLUDE,
+                            onClick = {
+                                if (!privilegeAvailable) {
+                                    showPrivilegeDialog = true
+                                } else {
+                                    perAppEnabled = true
+                                    perAppMode = Settings.PER_APP_PROXY_INCLUDE
+                                    Settings.perAppProxyEnabled = true
+                                    Settings.perAppProxyMode = Settings.PER_APP_PROXY_INCLUDE
+                                    notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
+                                }
+                            },
+                        )
+                        A2MRadioCard(
+                            title = "Pas de VPN pour ces applications",
+                            subtitle = "Par exemple, les applications bancaires restent hors du tunnel.",
+                            selected = perAppEnabled && perAppMode == Settings.PER_APP_PROXY_EXCLUDE,
+                            onClick = {
+                                if (!privilegeAvailable) {
+                                    showPrivilegeDialog = true
+                                } else {
+                                    perAppEnabled = true
+                                    perAppMode = Settings.PER_APP_PROXY_EXCLUDE
+                                    Settings.perAppProxyEnabled = true
+                                    Settings.perAppProxyMode = Settings.PER_APP_PROXY_EXCLUDE
+                                    notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
+                                }
+                            },
+                        )
                         if (perAppEnabled) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                ModeChoice(
-                                    label = "Exclure la liste",
-                                    selected = perAppMode == Settings.PER_APP_PROXY_EXCLUDE,
-                                    onClick = {
-                                        perAppMode = Settings.PER_APP_PROXY_EXCLUDE
-                                        Settings.perAppProxyMode = Settings.PER_APP_PROXY_EXCLUDE
-                                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
-                                    },
-                                )
-                                ModeChoice(
-                                    label = "Inclure la liste",
-                                    selected = perAppMode == Settings.PER_APP_PROXY_INCLUDE,
-                                    onClick = {
-                                        perAppMode = Settings.PER_APP_PROXY_INCLUDE
-                                        Settings.perAppProxyMode = Settings.PER_APP_PROXY_INCLUDE
-                                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
-                                    },
-                                )
-                            }
                             TextButton(onClick = { showAppPicker = true }) {
                                 Text(
                                     text = "Choisir les applications (${Settings.perAppProxyList.size})",
@@ -299,6 +289,21 @@ fun A2MRoutingScreen(
                             }
                         }
                     }
+                }
+            }
+
+            item {
+                SectionCard(title = "Réseaux") {
+                    SettingSwitch(
+                        title = "Contourner les réseaux privés",
+                        subtitle = "LAN et lien-local restent hors du tunnel. Requiert un redémarrage du tunnel.",
+                        checked = bypassPrivate,
+                        onCheckedChange = {
+                            bypassPrivate = it
+                            Settings.bypassPrivateNetworks = it
+                            notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
+                        },
+                    )
                 }
             }
 
@@ -617,33 +622,5 @@ private fun GroupItemRow(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun ModeChoice(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier =
-        Modifier
-            .clip(A2MShapes.tile)
-            .background(if (selected) A2MColors.BackgroundMid else A2MColors.BackgroundTop)
-            .border(
-                1.dp,
-                if (selected) A2MColors.CardBorderSelected else A2MColors.CardBorder,
-                A2MShapes.tile,
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) A2MColors.Accent else A2MColors.Muted,
-        )
     }
 }

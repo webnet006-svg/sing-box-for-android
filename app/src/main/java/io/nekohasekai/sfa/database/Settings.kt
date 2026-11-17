@@ -101,6 +101,23 @@ object Settings {
 
     /** Bloqueur de publicités : injecte des règles de routage « block » au démarrage du tunnel. */
     var adBlockEnabled by dataStore.boolean(SettingsKey.AD_BLOCK_ENABLED) { false }
+
+    /** Contournement des réseaux privés (LAN) : trafic local hors du tunnel. */
+    var bypassPrivateNetworks by dataStore.boolean(SettingsKey.BYPASS_PRIVATE_NETWORKS) { true }
+
+    /** DNS personnalisé : remplace le DNS du profil par celui choisi ici. */
+    var dnsOverrideEnabled by dataStore.boolean(SettingsKey.DNS_OVERRIDE_ENABLED) { false }
+    var dnsRemoteType by dataStore.string(SettingsKey.DNS_REMOTE_TYPE) { "https" }
+    var dnsRemoteServer by dataStore.string(SettingsKey.DNS_REMOTE_SERVER) { "1.1.1.1" }
+    var dnsBootstrapServer by dataStore.string(SettingsKey.DNS_BOOTSTRAP_SERVER) { "1.1.1.1" }
+
+    /** Moteur réseau : MTU, pile TUN, multiplexage, niveau de journal. */
+    var engineMtuMode by dataStore.string(SettingsKey.ENGINE_MTU_MODE) { "auto" }
+    var engineMtuCustom by dataStore.int(SettingsKey.ENGINE_MTU_CUSTOM) { 1500 }
+    var engineStackMode by dataStore.string(SettingsKey.ENGINE_STACK_MODE) { "auto" }
+    var engineMuxEnabled by dataStore.boolean(SettingsKey.ENGINE_MUX_ENABLED) { false }
+    var engineLogLevel by dataStore.string(SettingsKey.ENGINE_LOG_LEVEL) { "auto" }
+
     var systemProxyEnabled by dataStore.boolean(SettingsKey.SYSTEM_PROXY_ENABLED) { true }
 
     var privilegeSettingsEnabled by dataStore.boolean(SettingsKey.PRIVILEGE_SETTINGS_ENABLED) { false }
