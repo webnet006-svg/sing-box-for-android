@@ -50,11 +50,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.nekohasekai.sfa.bg.UpdateProfileWork
 import io.nekohasekai.sfa.compose.screen.configuration.ProfileImportHandler
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardViewModel
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
 import io.nekohasekai.sfa.dams.importer.ClipboardImporter
 import io.nekohasekai.sfa.database.Profile
+import io.nekohasekai.sfa.database.ProfileManager
+import io.nekohasekai.sfa.database.TypedProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -123,6 +126,15 @@ fun A2MServersScreen(
                 is ClipboardImporter.Outcome.Error -> importMessage = outcome.message
             }
             isImporting = false
+        }
+    }
+
+    /** Bascule la mise à jour automatique d'un abonnement (mécanisme réel du moteur). */
+    fun toggleAutoUpdate(profile: Profile) {
+        coroutineScope.launch(Dispatchers.IO) {
+            profile.typed.autoUpdate = !profile.typed.autoUpdate
+            ProfileManager.update(profile)
+            UpdateProfileWork.reconfigureUpdater()
         }
     }
 
@@ -200,6 +212,13 @@ fun A2MServersScreen(
                         profile = profile,
                         protocol = protocols[profile.id] ?: A2MProfileInfo.typeLabel(profile),
                         selected = profile.id == uiState.selectedProfileId,
+                        autoUpdateEnabled =
+                        if (profile.typed.type == TypedProfile.Type.Remote) {
+                            profile.typed.autoUpdate
+                        } else {
+                            null
+                        },
+                        onToggleAutoUpdate = { toggleAutoUpdate(profile) },
                         onClick = {
                             if (profile.id != uiState.selectedProfileId) {
                                 dashboardViewModel.selectProfile(profile.id)
@@ -468,6 +487,8 @@ private fun ServerRow(
     profile: Profile,
     protocol: String,
     selected: Boolean,
+    autoUpdateEnabled: Boolean?,
+    onToggleAutoUpdate: () -> Unit,
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -524,6 +545,17 @@ private fun ServerRow(
                 tint = A2MColors.CardBorderSelected,
                 modifier = Modifier.size(22.dp),
             )
+        }
+
+        autoUpdateEnabled?.let { autoUpdate ->
+            TextButton(onClick = onToggleAutoUpdate) {
+                Text(
+                    text = if (autoUpdate) "MàJ auto" else "MàJ auto off",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (autoUpdate) A2MColors.Cyan else A2MColors.Muted,
+                )
+            }
         }
 
         IconButton(onClick = onDelete) {
