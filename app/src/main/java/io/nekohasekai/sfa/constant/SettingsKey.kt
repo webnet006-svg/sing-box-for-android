@@ -48,6 +48,9 @@ object SettingsKey {
     const val IP_FINDER_CYCLES = "ip_finder_cycles"
     const val IP_FINDER_PAUSE_SEC = "ip_finder_pause_sec"
 
+    /** Consommation journalière : lignes `date|descendants|montants` (90 jours). */
+    const val DAILY_TRAFFIC = "daily_traffic"
+
     // Retour tactile (clics dans les réglages) : sound / vibrate / silent.
     const val CLICK_FEEDBACK = "click_feedback"
 

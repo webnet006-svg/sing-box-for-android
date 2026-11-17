@@ -65,7 +65,7 @@ object Importer {
             get() = "[${protocol.label}] $displayName"
     }
 
-    private data class Reality(val publicKey: String, val shortId: String)
+    internal data class Reality(val publicKey: String, val shortId: String)
 
     private data class ShareUri(
         val userInfo: String,
@@ -666,7 +666,7 @@ object Importer {
         return port
     }
 
-    private fun buildTransport(
+    internal fun buildTransport(
         network: String,
         host: String,
         path: String,
@@ -717,7 +717,7 @@ object Importer {
         }
     }
 
-    private fun buildTls(
+    internal fun buildTls(
         enabled: Boolean,
         serverName: String,
         insecure: Boolean,
@@ -760,7 +760,7 @@ object Importer {
         }
     }
 
-    private fun outbound(
+    internal fun outbound(
         type: String,
         host: String,
         port: Int,

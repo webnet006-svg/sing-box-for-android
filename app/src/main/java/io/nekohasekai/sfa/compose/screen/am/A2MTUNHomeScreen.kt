@@ -258,6 +258,7 @@ fun A2MTUNHomeScreen(
                 downHistory = uiState.downlinkHistory,
                 upHistory = uiState.uplinkHistory,
                 connections = uiState.connectionsCount,
+                onClick = { onNavigate(A2MRoutes.CONSUMPTION) },
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -484,6 +485,7 @@ private fun A2MTrafficCard(
     downHistory: List<Float>,
     upHistory: List<Float>,
     connections: Int,
+    onClick: () -> Unit,
 ) {
     Column(
         modifier =
@@ -492,6 +494,7 @@ private fun A2MTrafficCard(
             .clip(A2MShapes.card)
             .background(A2MColors.CardBrush)
             .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         // En-tête : titre + badge LIVE

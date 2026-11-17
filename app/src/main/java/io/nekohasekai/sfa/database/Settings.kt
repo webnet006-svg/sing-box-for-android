@@ -92,6 +92,9 @@ object Settings {
     var ipFinderCycles by dataStore.int(SettingsKey.IP_FINDER_CYCLES) { 100 }
     var ipFinderPauseSec by dataStore.int(SettingsKey.IP_FINDER_PAUSE_SEC) { 3 }
 
+    // ── Consommation journalière (90 jours) : deltas du trafic du tunnel ──
+    var dailyTraffic by dataStore.string(SettingsKey.DAILY_TRAFFIC) { "" }
+
     // ── Retour tactile dans les réglages : sound / vibrate / silent ──
     var clickFeedback by dataStore.string(SettingsKey.CLICK_FEEDBACK) { "silent" }
 

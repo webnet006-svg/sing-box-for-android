@@ -5,6 +5,7 @@ import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.sfa.bg.UpdateProfileWork
 import io.nekohasekai.sfa.database.Profile
 import io.nekohasekai.sfa.database.ProfileManager
+import io.nekohasekai.sfa.database.Settings
 import io.nekohasekai.sfa.database.TypedProfile
 import io.nekohasekai.sfa.utils.HTTPClient
 import kotlinx.coroutines.Dispatchers
@@ -124,6 +125,41 @@ class ClipboardImporter(private val context: Context) {
         }
 
         return Imported(imported, skipped, failures, subscriptionUrl)
+    }
+
+    /**
+     * Enregistre un profil local depuis l'éditeur « mode texte ».
+     *
+     * [profileId] null crée un nouveau profil ; sinon le profil existant doit
+     * être local (un abonnement distant reste géré par son URL).
+     */
+    suspend fun saveLocalProfile(
+        profileId: Long?,
+        name: String,
+        config: String,
+    ): Profile {
+        if (profileId == null) {
+            val used = ProfileManager.list().mapTo(mutableSetOf()) { it.name }
+            return createLocalProfile(
+                name = uniqueName(name, used),
+                config = config,
+                select = Settings.selectedProfile == -1L,
+            )
+        }
+        val profile =
+            ProfileManager.get(profileId)
+                ?: throw IllegalArgumentException("Profil introuvable.")
+        if (profile.typed.type != TypedProfile.Type.Local) {
+            throw IllegalArgumentException(
+                "Profil d'abonnement : la configuration est fournie par le serveur distant.",
+            )
+        }
+        val file = File(profile.typed.path)
+        file.parentFile?.mkdirs()
+        file.writeText(config)
+        profile.name = name.ifBlank { profile.name }
+        ProfileManager.update(profile)
+        return profile
     }
 
     private suspend fun createLocalProfile(name: String, config: String, select: Boolean): Profile {

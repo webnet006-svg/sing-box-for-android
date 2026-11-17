@@ -21,10 +21,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Memory
@@ -122,6 +124,8 @@ fun A2MSettingsScreen(
             Entry("Moteur réseau", "MTU, mux, pile TUN", Icons.Filled.Memory, A2MRoutes.SETTINGS_ENGINE, listOf("moteur", "mtu", "mux", "pile", "tun", "gvisor")),
             Entry("Partage hotspot", "Proxy pour le partage", Icons.Filled.WifiTethering, A2MRoutes.SETTINGS_HOTSPOT, listOf("hotspot", "partage", "proxy", "socks")),
             Entry("IP Finder", "Trouver une IP du réseau mobile", Icons.Filled.NetworkCheck, A2MRoutes.IP_FINDER, listOf("ip", "finder", "mode", "avion", "recherche", "réseau")),
+            Entry("Consommation", "Trafic quotidien, exports CSV", Icons.Filled.BarChart, A2MRoutes.CONSUMPTION, listOf("consommation", "trafic", "données", "data", "téléchargement", "téléversement", "jour", "csv")),
+            Entry("Transferts", "Envoyer et récupérer des fichiers", Icons.Filled.Download, A2MRoutes.TRANSFERS, listOf("transfert", "fichier", "upload", "téléverser", "download", "télécharger", "http")),
             Entry("Apparence", "Thèmes et mode d'affichage", Icons.Filled.Palette, A2MRoutes.APPEARANCE, listOf("apparence", "thème", "theme", "couleur", "palette", "sombre", "clair")),
             Entry("Automatisation", "Deep links, connexion", Icons.Filled.Link, A2MRoutes.SETTINGS_AUTOMATION, listOf("automatisation", "liens", "deep", "a2mtun")),
             Entry("Diagnostics", "Pourquoi la connexion échoue", Icons.Filled.BugReport, A2MRoutes.SETTINGS_DIAGNOSTICS, listOf("diagnostic", "panne", "échec", "echec", "vérifications")),

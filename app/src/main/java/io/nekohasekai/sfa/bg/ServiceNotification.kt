@@ -48,6 +48,7 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     private val commandClient =
         CommandClient(GlobalScope, CommandClient.ConnectionType.Status, this, localOnly = true)
     private var receiverRegistered = false
+    private var screenOn = true
 
     private val notificationBuilder by lazy {
         NotificationCompat.Builder(service, notificationChannel).setShowWhen(false).setOngoing(true)
@@ -100,11 +101,13 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     }
 
     suspend fun start() {
-        if (Settings.dynamicNotification && checkPermission()) {
-            commandClient.connect()
-            withContext(Dispatchers.Main) {
-                registerReceiver()
-            }
+        // Le client de statut reste connecté pendant toute la durée du service :
+        // il alimente le suivi de consommation journalière (A2MTrafficRecorder),
+        // même écran éteint. Seules les mises à jour de notification sont
+        // conditionnées aux réglages et à l'état de l'écran.
+        commandClient.connect()
+        withContext(Dispatchers.Main) {
+            registerReceiver()
         }
     }
 
@@ -120,6 +123,10 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     }
 
     override fun updateStatus(status: StatusMessage) {
+        A2MTrafficRecorder.record(status.downlinkTotal, status.uplinkTotal)
+        if (!screenOn || !Settings.dynamicNotification || !checkPermission()) {
+            return
+        }
         val content =
             Libbox.formatBytes(status.uplink) + "/s ↑\t" + Libbox.formatBytes(status.downlink) + "/s ↓"
         Application.notificationManager.notify(
@@ -131,16 +138,17 @@ class ServiceNotification(private val status: MutableLiveData<Status>, private v
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_SCREEN_ON -> {
-                commandClient.connect()
+                screenOn = true
             }
 
             Intent.ACTION_SCREEN_OFF -> {
-                commandClient.disconnect()
+                screenOn = false
             }
         }
     }
 
     fun close() {
+        A2MTrafficRecorder.resetBaseline()
         commandClient.disconnect()
         ServiceCompat.stopForeground(service, ServiceCompat.STOP_FOREGROUND_REMOVE)
         if (receiverRegistered) {

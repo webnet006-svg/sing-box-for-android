@@ -24,6 +24,14 @@ object A2MRoutes {
     const val SETTINGS_ADVANCED = "a2m/settings/advanced"
     const val SETTINGS_ABOUT = "a2m/settings/about"
     const val IP_FINDER = "a2m/tools/ipfinder"
+    const val CONSUMPTION = "a2m/settings/consumption"
+    const val TRANSFERS = "a2m/settings/transfers"
+
+    /** Éditeur de serveur « mode texte » : {profileId} = 0 pour une création. */
+    const val SERVER_EDITOR_BASE = "a2m/servers/editor"
+    const val SERVER_EDITOR = "$SERVER_EDITOR_BASE/{profileId}"
+
+    fun serverEditor(profileId: Long): String = "$SERVER_EDITOR_BASE/$profileId"
     const val APPEARANCE = "a2m/appearance"
 
     /** Préfixe commun, utilisé pour la barre de navigation A2M. */

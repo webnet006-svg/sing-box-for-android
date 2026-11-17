@@ -19,6 +19,7 @@ import io.nekohasekai.sfa.compose.screen.am.A2MAntiCensorshipScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MAppearanceScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MRoutingScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MServersScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MServerEditorScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsConnectionScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsAutomationScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MDiagnosticsScreen
@@ -167,10 +168,33 @@ fun NavHost(
             A2MServersScreen(
                 dashboardViewModel = dashboardViewModel ?: viewModel(),
                 onEditProfile = { profileId ->
-                    navController.navigate(ProfileRoutes.editProfile(profileId)) {
+                    navController.navigate(A2MRoutes.serverEditor(profileId)) {
                         launchSingleTop = true
                     }
                 },
+                onCreateServer = {
+                    navController.navigate(A2MRoutes.serverEditor(0)) {
+                        launchSingleTop = true
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(
+            route = A2MRoutes.SERVER_EDITOR,
+            arguments =
+                listOf(
+                    navArgument("profileId") {
+                        type = NavType.LongType
+                    },
+                ),
+        ) { entry ->
+            val id = entry.arguments?.getLong("profileId") ?: 0L
+            A2MServerEditorScreen(
+                profileId = id.takeIf { it > 0L },
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -208,6 +232,20 @@ fun NavHost(
             A2MIPFinderScreen(
                 serviceStatus = serviceStatus,
                 dashboardViewModel = dashboardViewModel ?: viewModel(),
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.CONSUMPTION) {
+            A2MConsumptionScreen(
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.TRANSFERS) {
+            A2MTransfersScreen(
                 onBack = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
             )

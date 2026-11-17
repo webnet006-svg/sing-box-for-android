@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Search
@@ -83,6 +84,7 @@ import kotlinx.coroutines.withContext
 fun A2MServersScreen(
     dashboardViewModel: DashboardViewModel,
     onEditProfile: (Long) -> Unit = {},
+    onCreateServer: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val uiState by dashboardViewModel.uiState.collectAsState()
@@ -369,6 +371,15 @@ fun A2MServersScreen(
                     onClick = {
                         showImportSheet = false
                         showLinkDialog = true
+                    },
+                )
+                ImportOption(
+                    icon = Icons.Filled.EditNote,
+                    title = "Créer manuellement",
+                    subtitle = "Saisie guidée, sans écrire de JSON",
+                    onClick = {
+                        showImportSheet = false
+                        onCreateServer()
                     },
                 )
                 ImportOption(
