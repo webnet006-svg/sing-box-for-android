@@ -92,12 +92,20 @@ fun A2MRoutingScreen(
 
     var perAppEnabled by remember { mutableStateOf(Settings.perAppProxyEnabled) }
     var perAppMode by remember { mutableStateOf(Settings.perAppProxyMode) }
+    var serviceMode by remember { mutableStateOf(Settings.serviceMode) }
     var showPrivilegeDialog by remember { mutableStateOf(false) }
     var showAppPicker by remember { mutableStateOf(false) }
     var installedApps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     var selectedApps by remember { mutableStateOf(Settings.perAppProxyList) }
 
     var dnsServers by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    LaunchedEffect(dashboardState.selectedProfileId) {
+        serviceMode =
+            withContext(Dispatchers.IO) {
+                Settings.detectServiceMode()
+            }
+    }
 
     LaunchedEffect(dashboardState.selectedProfileId, dashboardState.profiles) {
         val profile = dashboardState.profiles.firstOrNull { it.id == dashboardState.selectedProfileId }
@@ -149,7 +157,7 @@ fun A2MRoutingScreen(
                     )
                     Text(
                         text =
-                        if (Settings.detectServiceMode() == ServiceMode.VPN) {
+                        if (serviceMode == ServiceMode.VPN) {
                             "Mode VPN (TUN) · sortie par ${dashboardState.selectedProfileName ?: "aucun serveur"}"
                         } else {
                             "Mode proxy local · sortie par ${dashboardState.selectedProfileName ?: "aucun serveur"}"

@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +34,8 @@ import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
 import io.nekohasekai.sfa.constant.ServiceMode
 import io.nekohasekai.sfa.constant.Status
 import io.nekohasekai.sfa.database.Settings
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Réglages A2M TUN.
@@ -48,8 +51,14 @@ fun A2MSettingsScreen(
 
     var dynamicNotification by remember { mutableStateOf(Settings.dynamicNotification) }
     var allowBypass by remember { mutableStateOf(Settings.allowBypass) }
+    var serviceMode by remember { mutableStateOf(Settings.serviceMode) }
 
-    val serviceMode = Settings.detectServiceMode()
+    LaunchedEffect(serviceStatus) {
+        serviceMode =
+            withContext(Dispatchers.IO) {
+                Settings.detectServiceMode()
+            }
+    }
     val coreVersion = remember { runCatching { Libbox.version() }.getOrDefault("—") }
 
     LazyColumn(
