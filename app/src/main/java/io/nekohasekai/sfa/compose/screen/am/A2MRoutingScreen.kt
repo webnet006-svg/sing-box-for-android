@@ -70,7 +70,16 @@ fun A2MRoutingScreen(
     serviceStatus: Status,
     dashboardViewModel: DashboardViewModel,
     modifier: Modifier = Modifier,
-    groupsViewModel: GroupsViewModel = viewModel(),
+    groupsViewModel: GroupsViewModel =
+        viewModel(
+            factory =
+            object : androidx.lifecycle.ViewModelProvider.Factory {
+                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                    @Suppress("UNCHECKED_CAST")
+                    return GroupsViewModel(dashboardViewModel.commandClient) as T
+                }
+            },
+        ),
 ) {
     val context = LocalContext.current
     val scaffoldPadding = LocalScaffoldPadding.current

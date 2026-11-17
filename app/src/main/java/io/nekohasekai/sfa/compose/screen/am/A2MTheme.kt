@@ -39,3 +39,16 @@ object A2MShapes {
     val tile = RoundedCornerShape(14.dp)
     val chip = RoundedCornerShape(999.dp)
 }
+
+/** Couleur du badge protocole, dérivée du code court réel (VM, VL, TR…). */
+internal fun protocolBadgeColor(code: String): Color =
+    when (code) {
+        "VM" -> Color(0xFF7C5CFF)
+        "VL" -> Color(0xFF189AE8)
+        "TR" -> Color(0xFFFF7043)
+        "SS" -> Color(0xFF2EAF6F)
+        "HY", "H2" -> Color(0xFFFFB300)
+        "TU" -> Color(0xFFE040FB)
+        "WG" -> Color(0xFF8BC34A)
+        else -> A2MColors.Accent
+    }

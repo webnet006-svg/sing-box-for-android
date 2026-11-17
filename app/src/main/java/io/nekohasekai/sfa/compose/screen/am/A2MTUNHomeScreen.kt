@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,27 +20,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -53,21 +48,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import io.nekohasekai.sfa.bg.BoxService
 import io.nekohasekai.sfa.compose.base.GlobalEventBus
 import io.nekohasekai.sfa.compose.base.UiEvent
 import io.nekohasekai.sfa.compose.navigation.A2MRoutes
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardUiState
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardViewModel
+import io.nekohasekai.sfa.compose.screen.dashboard.groups.GroupsViewModel
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
 import io.nekohasekai.sfa.constant.Status
 import io.nekohasekai.sfa.utils.HTTPClient
@@ -79,9 +79,12 @@ import org.json.JSONObject
 
 private const val A2M_IP_API_URL = "https://api.ipify.org?format=json"
 
-private val A2M_ORB_BRUSH = Brush.radialGradient(listOf(Color(0xFF0C2E33), Color(0xFF071A22)))
+private val A2M_ORB_BRUSH = Brush.radialGradient(listOf(Color(0xFF12283C), Color(0xFF081523)))
 private val A2M_ORB_GLOW = Brush.radialGradient(listOf(Color(0x4D16E0C4), Color(0x0016E0C4)))
 private val A2M_SPEED_BRUSH = Brush.linearGradient(listOf(Color(0xFF0C2B2C), Color(0xFF071A20)))
+
+/** État « froid » de l'orbe : bleu désaturé, comme la référence. */
+private val A2M_IDLE_RING = Color(0xFF3E6FA6)
 
 private suspend fun fetchExitIp(): String? =
     withContext(Dispatchers.IO) {
@@ -100,7 +103,8 @@ private fun formatSession(seconds: Long): String {
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+private suspend fun fetchExitIp(): String? =
+
 @Composable
 fun A2MTUNHomeScreen(
     serviceStatus: Status,
@@ -109,15 +113,28 @@ fun A2MTUNHomeScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by dashboardViewModel.uiState.collectAsState()
+    // Factory obligatoire : GroupsViewModel n'a pas de constructeur vide.
+    val groupsViewModel: GroupsViewModel =
+        viewModel(
+            factory =
+            object : androidx.lifecycle.ViewModelProvider.Factory {
+                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                    @Suppress("UNCHECKED_CAST")
+                    return GroupsViewModel(dashboardViewModel.commandClient) as T
+                }
+            },
+        )
+    val groupsState by groupsViewModel.uiState.collectAsState()
     val scaffoldPadding = LocalScaffoldPadding.current
     val coroutineScope = rememberCoroutineScope()
 
     var exitIp by remember { mutableStateOf<String?>(null) }
     var isRefreshingIp by remember { mutableStateOf(false) }
     var selectedProtocol by remember { mutableStateOf<String?>(null) }
+    var selectedCode by remember { mutableStateOf("") }
+    var selectedAddress by remember { mutableStateOf<String?>(null) }
     var toastMessage by remember { mutableStateOf<String?>(null) }
     var connectionError by remember { mutableStateOf(false) }
-    var showMenu by remember { mutableStateOf(false) }
 
     // Chrono de session : démarre au passage réel à Started (donnée du moteur, pas un ornement).
     var connectedAt by remember { mutableLongStateOf(0L) }
@@ -150,10 +167,16 @@ fun A2MTUNHomeScreen(
 
     LaunchedEffect(uiState.selectedProfileId, uiState.profiles) {
         val profile = uiState.profiles.firstOrNull { it.id == uiState.selectedProfileId }
-        selectedProtocol =
-            profile?.let { selected ->
-                withContext(Dispatchers.IO) { A2MProfileInfo.protocolLabel(selected) }
+        selectedProtocol = null
+        selectedCode = ""
+        selectedAddress = null
+        profile?.let { selected ->
+            withContext(Dispatchers.IO) {
+                selectedProtocol = A2MProfileInfo.protocolLabel(selected)
+                selectedCode = A2MProfileInfo.protocolCode(selected)
+                selectedAddress = A2MProfileInfo.serverAddress(selected)
             }
+        }
     }
 
     LaunchedEffect(toastMessage) {
@@ -177,74 +200,163 @@ fun A2MTUNHomeScreen(
     val isBusy = serviceStatus == Status.Starting || serviceStatus == Status.Stopping
     val hasFailed = connectionError && serviceStatus == Status.Stopped
 
+    // Latence réelle de sortie : élément sélectionné du premier groupe sélectionnable de la config active.
+    val testableGroup = groupsState.groups.firstOrNull { it.selectable && it.items.isNotEmpty() }
+    val exitDelay = testableGroup?.items?.firstOrNull { it.tag == testableGroup.selected }?.urlTestDelay ?: 0
+
     Box(
         modifier =
         modifier
             .fillMaxSize()
             .background(A2MColors.BackgroundBrush),
     ) {
-        Box(
+        Column(
             modifier =
             Modifier
                 .fillMaxSize()
-                .widthIn(max = 480.dp)
-                .align(Alignment.Center),
+                .padding(scaffoldPadding)
+                .padding(horizontal = 20.dp),
         ) {
-            Column(
-                modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(scaffoldPadding)
-                    .padding(horizontal = 20.dp),
+            // ── En-tête : marque + bouton journal ──
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                // ── En-tête SniTunnel-like : statut + serveur actif tappable ──
-                A2MHomeHeader(
-                    status = serviceStatus,
-                    hasFailed = hasFailed,
-                    serverName = uiState.selectedProfileName,
-                    protocol = selectedProtocol,
-                    hasServer = uiState.selectedProfileId != -1L,
-                    onServerClick = { onNavigate(A2MRoutes.SERVERS) },
-                    onMenuClick = { showMenu = true },
+                Box(
+                    modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(A2MColors.Tile)
+                        .border(1.dp, A2MColors.CardBorderSelected.copy(alpha = 0.55f), RoundedCornerShape(11.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Shield,
+                        contentDescription = null,
+                        tint = A2MColors.Accent,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Text(
+                    text = "A2M TUN",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = A2MColors.Text,
+                    modifier = Modifier.padding(start = 10.dp),
                 )
+                Spacer(modifier = Modifier.weight(1f))
+                Box(
+                    modifier =
+                    Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, A2MColors.CardBorder, RoundedCornerShape(12.dp))
+                        .clickable { onNavigate(A2MRoutes.JOURNAL) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Description,
+                        contentDescription = "Journal",
+                        tint = A2MColors.Muted,
+                        modifier = Modifier.size(19.dp),
+                    )
+                }
+            }
 
-                Spacer(modifier = Modifier.weight(1.2f))
-
-                // ── Orbe de connexion avec chrono de session ──
-                A2MConnectionOrb(
-                    isConnected = isConnected,
-                    isBusy = isBusy,
-                    hasFailed = hasFailed,
-                    sessionSeconds = sessionSeconds,
-                    onClick = {
-                        connectionError = false
-                        when (serviceStatus) {
-                            Status.Stopped -> GlobalEventBus.tryEmit(UiEvent.RequestStartService)
-                            Status.Starting, Status.Started -> BoxService.stop()
-                            else -> Unit
-                        }
-                    },
-                )
-
+            // ── Statut centré ──
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Box(
+                        modifier =
+                        Modifier
+                            .size(11.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when {
+                                    hasFailed -> A2MColors.Danger
+                                    isConnected -> A2MColors.Accent
+                                    isBusy -> A2MColors.Amber
+                                    else -> A2MColors.Faint
+                                },
+                            ),
+                    )
+                    Text(
+                        text =
+                        when {
+                            hasFailed -> "Échec"
+                            isConnected -> "Connecté"
+                            isBusy -> "Connexion…"
+                            else -> "Déconnecté"
+                        },
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = A2MColors.Text,
+                    )
+                }
                 Text(
                     text =
                     when {
-                        hasFailed -> "Échec de connexion — vérifiez le serveur puis réessayez"
-                        isConnected -> "Tunnel actif — trafic protégé"
+                        hasFailed -> "Échec de connexion · touchez pour réessayer"
+                        isConnected -> "Prêt · tunnel actif"
                         isBusy -> "Négociation en cours…"
-                        else -> "Touchez le bouton pour activer le tunnel"
+                        else -> "Prêt · touchez pour connecter"
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = A2MColors.Faint,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = A2MColors.Muted,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
+            }
 
-                Spacer(modifier = Modifier.weight(1.4f))
+            Spacer(modifier = Modifier.weight(0.9f))
 
-                // ── Débits en direct ──
+            // ── Orbe à graduations avec chrono de session ──
+            A2MConnectionOrb(
+                isConnected = isConnected,
+                isBusy = isBusy,
+                hasFailed = hasFailed,
+                sessionSeconds = sessionSeconds,
+                onClick = {
+                    connectionError = false
+                    when (serviceStatus) {
+                        Status.Stopped -> GlobalEventBus.tryEmit(UiEvent.RequestStartService)
+                        Status.Starting, Status.Started -> BoxService.stop()
+                        else -> Unit
+                    }
+                },
+            )
+
+            Spacer(modifier = Modifier.weight(1.1f))
+
+            // ── Carte config active façon SniTunnel : badge protocole + PING réel ──
+            A2MConfigCard(
+                hasServer = uiState.selectedProfileId != -1L,
+                name = uiState.selectedProfileName,
+                protocol = selectedProtocol,
+                code = selectedCode,
+                address = selectedAddress,
+                exitDelay = exitDelay,
+                isTesting = testableGroup != null && testableGroup.tag in groupsState.testingGroups,
+                onClick = { onNavigate(A2MRoutes.SERVERS) },
+                onPing = {
+                    if (serviceStatus != Status.Started) {
+                        toastMessage = "Démarrez le tunnel pour mesurer la latence"
+                    } else {
+                        testableGroup?.let { groupsViewModel.urlTestGroup(it.tag) }
+                    }
+                },
+            )
+
+            // ── Débits et stats : uniquement quand le tunnel est actif (comme la référence) ──
+            if (isConnected) {
+                Spacer(modifier = Modifier.height(10.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -255,7 +367,6 @@ fun A2MTUNHomeScreen(
                         speed = uiState.downlink,
                         total = uiState.downlinkTotal,
                         accent = A2MColors.Accent,
-                        highlight = isConnected,
                         modifier = Modifier.weight(1f),
                     )
                     A2MSpeedCard(
@@ -264,28 +375,13 @@ fun A2MTUNHomeScreen(
                         speed = uiState.uplink,
                         total = uiState.uplinkTotal,
                         accent = A2MColors.AccentUpload,
-                        highlight = isConnected,
                         modifier = Modifier.weight(1f),
                     )
                 }
-
                 Spacer(modifier = Modifier.height(10.dp))
-
-                // ── Mini-statistiques ──
-                A2MMiniStatsRow(
-                    totalDown = uiState.downlinkTotal,
-                    totalUp = uiState.uplinkTotal,
-                    sessionSeconds = sessionSeconds,
-                    isConnected = isConnected,
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // ── IP de sortie ──
                 A2MIPCard(
                     exitIp = exitIp,
                     isRefreshing = isRefreshingIp,
-                    isConnected = isConnected,
                     onRefresh = {
                         coroutineScope.launch {
                             isRefreshingIp = true
@@ -294,39 +390,9 @@ fun A2MTUNHomeScreen(
                         }
                     },
                 )
-
-                Spacer(modifier = Modifier.height(16.dp))
             }
-        }
-    }
 
-    if (showMenu) {
-        ModalBottomSheet(
-            onDismissRequest = { showMenu = false },
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            containerColor = Color(0xFF071520),
-            contentColor = A2MColors.Text,
-        ) {
-            Column(
-                modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
-            ) {
-                Text(
-                    text = "Navigation",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = A2MColors.Text,
-                    modifier = Modifier.padding(bottom = 10.dp),
-                )
-                A2MSheetItem("Accueil", A2MRoutes.HOME, Icons.Filled.Home, onClick = { showMenu = false; onNavigate(A2MRoutes.HOME) })
-                A2MSheetItem("Serveurs", A2MRoutes.SERVERS, Icons.Outlined.Language, onClick = { showMenu = false; onNavigate(A2MRoutes.SERVERS) })
-                A2MSheetItem("Routage", A2MRoutes.ROUTING, Icons.Filled.SwapVert, onClick = { showMenu = false; onNavigate(A2MRoutes.ROUTING) })
-                A2MSheetItem("Journal", A2MRoutes.JOURNAL, Icons.Filled.Description, onClick = { showMenu = false; onNavigate(A2MRoutes.JOURNAL) })
-                A2MSheetItem("Réglages", A2MRoutes.SETTINGS, Icons.Filled.Settings, onClick = { showMenu = false; onNavigate(A2MRoutes.SETTINGS) })
-                Spacer(modifier = Modifier.height(12.dp))
-            }
+            Spacer(modifier = Modifier.height(14.dp))
         }
     }
 
@@ -344,7 +410,7 @@ fun A2MTUNHomeScreen(
                 modifier =
                 Modifier
                     .padding(horizontal = 24.dp)
-                    .padding(bottom = 96.dp)
+                    .padding(bottom = 110.dp)
                     .clip(A2MShapes.card)
                     .background(Color(0xF00B2231))
                     .border(1.dp, A2MColors.CardBorderSelected, A2MShapes.card)
@@ -354,98 +420,7 @@ fun A2MTUNHomeScreen(
     }
 }
 
-// ── En-tête : statut + serveur actif ───────────────────────────────────────
-
-@Composable
-private fun A2MHomeHeader(
-    status: Status,
-    hasFailed: Boolean,
-    serverName: String?,
-    protocol: String?,
-    hasServer: Boolean,
-    onServerClick: () -> Unit,
-    onMenuClick: () -> Unit,
-) {
-    val statusLabel =
-        when {
-            hasFailed -> "Échec de connexion"
-            status == Status.Started -> "Connecté"
-            status == Status.Starting -> "Connexion…"
-            status == Status.Stopping -> "Déconnexion…"
-            else -> "Déconnecté"
-        }
-    val statusColor =
-        when {
-            hasFailed -> A2MColors.Danger
-            status == Status.Started -> A2MColors.Accent
-            status == Status.Starting || status == Status.Stopping -> A2MColors.Amber
-            else -> A2MColors.Faint
-        }
-
-    Row(
-        modifier =
-        Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .clickable(onClick = onServerClick),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(
-                    modifier =
-                    Modifier
-                        .size(9.dp)
-                        .clip(CircleShape)
-                        .background(statusColor),
-                )
-                Text(
-                    text = statusLabel,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = A2MColors.Text,
-                )
-            }
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.padding(start = 17.dp, top = 2.dp),
-            ) {
-                Text(
-                    text =
-                    if (hasServer) {
-                        listOfNotNull(serverName ?: "Serveur", protocol).joinToString(" · ")
-                    } else {
-                        "Aucun serveur — choisir"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (hasServer) A2MColors.Muted else A2MColors.Accent,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Icon(
-                    imageVector = Icons.Filled.ChevronRight,
-                    contentDescription = null,
-                    tint = A2MColors.Faint,
-                    modifier = Modifier.size(14.dp),
-                )
-            }
-        }
-        IconButton(onClick = onMenuClick) {
-            Icon(
-                imageVector = Icons.Filled.Menu,
-                contentDescription = "Menu",
-                tint = A2MColors.Muted,
-                modifier = Modifier.size(22.dp),
-            )
-        }
-    }
-}
-
-// ── Orbe de connexion ───────────────────────────────────────────────────────
+// ── Orbe de connexion à graduations radiales ───────────────────────────────
 
 @Composable
 private fun A2MConnectionOrb(
@@ -462,52 +437,55 @@ private fun A2MConnectionOrb(
         animationSpec = infiniteRepeatable(tween(1400), RepeatMode.Reverse),
         label = "pulse",
     )
-    val glowAlpha =
-        when {
-            isConnected -> pulse
-            isBusy -> 0.28f
-            else -> 0f
-        }
-    val ringColor by animateColorAsState(
+    val glowAlpha = if (isConnected) pulse else if (isBusy) 0.25f else 0f
+    val stateColor by animateColorAsState(
         targetValue =
         when {
             hasFailed -> A2MColors.Danger
             isConnected || isBusy -> A2MColors.Accent
-            else -> Color(0xFF274A52)
+            else -> A2M_IDLE_RING
         },
         animationSpec = tween(300),
         label = "ring",
     )
 
-    Box(
-        modifier = Modifier.fillMaxWidth(),
-        contentAlignment = Alignment.Center,
-    ) {
+    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         // Halo
         Box(
             modifier =
             Modifier
-                .size(252.dp)
+                .size(276.dp)
                 .graphicsLayer { this.alpha = glowAlpha }
                 .clip(CircleShape)
                 .background(A2M_ORB_GLOW),
         )
-        // Anneau décoratif
-        Box(
-            modifier =
-            Modifier
-                .size(224.dp)
-                .clip(CircleShape)
-                .border(1.dp, ringColor.copy(alpha = if (isConnected) pulse * 0.5f else 0.22f), CircleShape),
-        )
-        // Bouton principal : logo + action + chrono (comme SniTunnel)
+        // Graduations radiales (cadran)
+        Canvas(modifier = Modifier.size(260.dp)) {
+            val strokeWidth = 2.dp.toPx()
+            val radius = size.minDimension / 2f
+            val inner = radius - 12.dp.toPx()
+            val outer = radius - 4.dp.toPx()
+            val ticks = 48
+            repeat(ticks) { index ->
+                rotate(angle = index * (360f / ticks)) {
+                    drawLine(
+                        color = stateColor.copy(alpha = if (index % 6 == 0) 0.85f else 0.38f),
+                        start = Offset(center.x, center.y - inner),
+                        end = Offset(center.x, center.y - outer),
+                        strokeWidth = strokeWidth,
+                        cap = StrokeCap.Round,
+                    )
+                }
+            }
+        }
+        // Bouton principal : power + action + chrono (comme la référence)
         Box(
             modifier =
             Modifier
                 .size(188.dp)
                 .clip(CircleShape)
                 .background(A2M_ORB_BRUSH)
-                .border(2.dp, ringColor, CircleShape)
+                .border(2.dp, stateColor, CircleShape)
                 .clickable(enabled = !isBusy, onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
@@ -522,36 +500,169 @@ private fun A2MConnectionOrb(
                     Icon(
                         imageVector = Icons.Filled.PowerSettingsNew,
                         contentDescription = null,
-                        tint = if (isConnected) A2MColors.Accent else A2MColors.Muted,
-                        modifier = Modifier.size(38.dp),
+                        tint = if (isConnected) A2MColors.Accent else A2MColors.Text,
+                        modifier = Modifier.size(40.dp),
                     )
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(9.dp))
                 Text(
                     text =
                     when {
                         isConnected -> formatSession(sessionSeconds)
                         isBusy -> "—:—"
-                        else -> "Connecter"
+                        else -> "CONNECTER"
                     },
                     style =
                     if (isConnected || isBusy) {
                         MaterialTheme.typography.titleLarge.copy(fontFamily = FontFamily.Monospace)
                     } else {
-                        MaterialTheme.typography.titleMedium
+                        MaterialTheme.typography.titleMedium.copy(letterSpacing = 2.sp)
                     },
                     fontWeight = FontWeight.Bold,
                     color = A2MColors.Text,
                 )
                 if (isConnected) {
                     Text(
-                        text = "Déconnexion",
-                        style = MaterialTheme.typography.labelSmall,
+                        text = "DÉCONNECTER",
+                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.4.sp),
                         color = A2MColors.Faint,
                     )
                 }
             }
         }
+    }
+}
+
+// ── Carte config active ─────────────────────────────────────────────────────
+
+@Composable
+private fun A2MConfigCard(
+    hasServer: Boolean,
+    name: String?,
+    protocol: String?,
+    code: String,
+    address: String?,
+    exitDelay: Int,
+    isTesting: Boolean,
+    onClick: () -> Unit,
+    onPing: () -> Unit,
+) {
+    Row(
+        modifier =
+        Modifier
+            .fillMaxWidth()
+            .clip(A2MShapes.card)
+            .background(A2MColors.CardBrush)
+            .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // Badge protocole coloré (code court réel)
+        Box(
+            modifier =
+            Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(13.dp))
+                .background(if (hasServer) protocolBadgeColor(code) else A2MColors.Tile),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (hasServer && code.isNotBlank()) code else "—",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (hasServer) "Config prête" else "Aucune config",
+                style = MaterialTheme.typography.labelSmall,
+                color = A2MColors.Faint,
+            )
+            Text(
+                text = name ?: "Choisir un serveur",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = A2MColors.Text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(top = 3.dp),
+            ) {
+                if (protocol != null) {
+                    Text(
+                        text = protocol,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = A2MColors.Accent,
+                        modifier =
+                        Modifier
+                            .clip(A2MShapes.chip)
+                            .border(1.dp, A2MColors.Accent.copy(alpha = 0.45f), A2MShapes.chip)
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+                Text(
+                    text = address ?: "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = A2MColors.Muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        // Latence réelle de sortie si connue
+        if (exitDelay > 0) {
+            Text(
+                text = "$exitDelay ms",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color =
+                when {
+                    exitDelay <= 120 -> A2MColors.Accent
+                    exitDelay <= 300 -> A2MColors.Amber
+                    else -> A2MColors.Danger
+                },
+            )
+        }
+        // Bouton PING réel (test du groupe de sortie actif)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.clickable(onClick = onPing),
+        ) {
+            if (isTesting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(15.dp),
+                    strokeWidth = 2.dp,
+                    color = A2MColors.Accent,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.Speed,
+                    contentDescription = null,
+                    tint = A2MColors.Accent,
+                    modifier = Modifier.size(17.dp),
+                )
+            }
+            Text(
+                text = "PING",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = A2MColors.Accent,
+            )
+        }
+        Icon(
+            imageVector = Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = A2MColors.Faint,
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 
@@ -564,7 +675,6 @@ private fun A2MSpeedCard(
     speed: String,
     total: String,
     accent: Color,
-    highlight: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -572,11 +682,7 @@ private fun A2MSpeedCard(
         modifier
             .clip(A2MShapes.card)
             .background(A2M_SPEED_BRUSH)
-            .border(
-                1.dp,
-                if (highlight) A2MColors.CardBorderSelected.copy(alpha = 0.55f) else A2MColors.CardBorder,
-                A2MShapes.card,
-            )
+            .border(1.dp, A2MColors.CardBorderSelected.copy(alpha = 0.55f), A2MShapes.card)
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Row(
@@ -612,75 +718,12 @@ private fun A2MSpeedCard(
     }
 }
 
-@Composable
-private fun A2MMiniStatsRow(
-    totalDown: String,
-    totalUp: String,
-    sessionSeconds: Long,
-    isConnected: Boolean,
-) {
-    Row(
-        modifier =
-        Modifier
-            .fillMaxWidth()
-            .clip(A2MShapes.card)
-            .background(A2MColors.CardBrush)
-            .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
-            .padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        A2MMiniStat("↓ Total", totalDown, Modifier.weight(1f))
-        A2MStatDivider()
-        A2MMiniStat("↑ Total", totalUp, Modifier.weight(1f))
-        A2MStatDivider()
-        A2MMiniStat("Session", if (isConnected) formatSession(sessionSeconds) else "—", Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun A2MMiniStat(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = A2MColors.Faint,
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = A2MColors.Text,
-            maxLines = 1,
-            modifier = Modifier.padding(top = 2.dp),
-        )
-    }
-}
-
-@Composable
-private fun A2MStatDivider() {
-    Box(
-        modifier =
-        Modifier
-            .height(30.dp)
-            .width(1.dp)
-            .background(A2MColors.CardBorder),
-    )
-}
-
 // ── IP de sortie ────────────────────────────────────────────────────────────
 
 @Composable
 private fun A2MIPCard(
     exitIp: String?,
     isRefreshing: Boolean,
-    isConnected: Boolean,
     onRefresh: () -> Unit,
 ) {
     Row(
@@ -710,8 +753,7 @@ private fun A2MIPCard(
             when {
                 exitIp != null -> exitIp
                 isRefreshing -> "…"
-                isConnected -> "indisponible"
-                else -> "—"
+                else -> "indisponible"
             },
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
@@ -738,42 +780,5 @@ private fun A2MIPCard(
                     .clickable(onClick = onRefresh),
             )
         }
-    }
-}
-
-// ── Menu latéral (feuille) ──────────────────────────────────────────────────
-
-@Composable
-private fun A2MSheetItem(
-    label: String,
-    route: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-) {
-    val selected = route == A2MRoutes.HOME
-    Row(
-        modifier =
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = 3.dp)
-            .clip(A2MShapes.tile)
-            .background(if (selected) A2MColors.Tile else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (selected) A2MColors.Accent else A2MColors.Muted,
-            modifier = Modifier.size(20.dp),
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) A2MColors.Text else A2MColors.Muted,
-        )
     }
 }

@@ -151,4 +151,28 @@ class A2MProfileInfoTest {
         assertEquals("Trojan", A2MProfileInfo.protocolLabel(profile))
         assertEquals(listOf("https://dns.google/dns-query"), A2MProfileInfo.dnsServers(profile))
     }
+
+    @Test
+    fun readsShortProtocolCodes() {
+        assertEquals("VL", A2MProfileInfo.protocolCode(profileWithConfig(config("vless"))))
+        assertEquals("VM", A2MProfileInfo.protocolCode(profileWithConfig(config("vmess"))))
+        assertEquals("TR", A2MProfileInfo.protocolCode(profileWithConfig(config("trojan"))))
+        assertEquals("H2", A2MProfileInfo.protocolCode(profileWithConfig(config("hysteria2"))))
+    }
+
+    @Test
+    fun readsServerAddressAndHandlesBrokenFile() {
+        val profile = profileWithConfig(config("vless"))
+        assertEquals("example.com", A2MProfileInfo.serverAddress(profile))
+        val broken = Profile(id = 3L, name = "Broken", typed = missingFileTyped())
+        assertTrue(A2MProfileInfo.serverAddress(broken) == null)
+        assertEquals("", A2MProfileInfo.protocolCode(broken))
+    }
+
+    private fun missingFileTyped(): TypedProfile {
+        val typed = TypedProfile()
+        typed.type = TypedProfile.Type.Local
+        typed.path = "/nonexistent/a2m/does-not-exist.json"
+        return typed
+    }
 }

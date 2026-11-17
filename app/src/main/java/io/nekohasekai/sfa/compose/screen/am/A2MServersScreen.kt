@@ -22,10 +22,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,6 +48,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -87,6 +90,9 @@ fun A2MServersScreen(
 
     var pendingDelete by remember { mutableStateOf<Profile?>(null) }
     var protocols by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    var codes by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    var addresses by remember { mutableStateOf<Map<Long, String?>>(emptyMap()) }
+    var searchQuery by remember { mutableStateOf("") }
 
     var showImportSheet by remember { mutableStateOf(false) }
     var showLinkDialog by remember { mutableStateOf(false) }
@@ -97,10 +103,14 @@ fun A2MServersScreen(
 
     LaunchedEffect(uiState.profiles) {
         val profiles = uiState.profiles
-        protocols =
-            withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) {
+            protocols =
                 profiles.associate { it.id to A2MProfileInfo.protocolLabel(it) }
-            }
+            codes =
+                profiles.associate { it.id to A2MProfileInfo.protocolCode(it) }
+            addresses =
+                profiles.associate { it.id to A2MProfileInfo.serverAddress(it) }
+        }
     }
 
     fun importText(text: String) {
@@ -208,10 +218,41 @@ fun A2MServersScreen(
                     EmptyServersCard(onImport = { showImportSheet = true })
                 }
             } else {
-                items(uiState.profiles, key = { it.id }) { profile ->
+                item {
+                    // Recherche façon SniTunnel : filtre par nom, protocole ou adresse.
+                    A2MSearchField(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        placeholder = "Rechercher une config",
+                    )
+                }
+                val query = searchQuery.trim()
+                val filteredProfiles =
+                    if (query.isEmpty()) {
+                        uiState.profiles
+                    } else {
+                        uiState.profiles.filter { profile ->
+                            profile.name.contains(query, ignoreCase = true) ||
+                                (protocols[profile.id] ?: "").contains(query, ignoreCase = true) ||
+                                (addresses[profile.id] ?: "").contains(query, ignoreCase = true)
+                        }
+                    }
+                if (filteredProfiles.isEmpty()) {
+                    item {
+                        Text(
+                            text = "Aucune config ne correspond à « $query »",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = A2MColors.Muted,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    }
+                }
+                items(filteredProfiles, key = { it.id }) { profile ->
                     ServerRow(
                         profile = profile,
                         protocol = protocols[profile.id] ?: A2MProfileInfo.typeLabel(profile),
+                        code = codes[profile.id] ?: "",
+                        address = addresses[profile.id],
                         selected = profile.id == uiState.selectedProfileId,
                         autoUpdateEnabled =
                         if (profile.typed.type == TypedProfile.Type.Remote) {
@@ -487,6 +528,8 @@ private fun ImportOption(
 private fun ServerRow(
     profile: Profile,
     protocol: String,
+    code: String,
+    address: String?,
     selected: Boolean,
     autoUpdateEnabled: Boolean?,
     onToggleAutoUpdate: () -> Unit,
@@ -509,42 +552,64 @@ private fun ServerRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        // Badge protocole coloré (code court réel : VM, VL, TR…)
         Box(
             modifier =
             Modifier
                 .size(42.dp)
                 .clip(A2MShapes.tile)
-                .background(A2MColors.Tile),
+                .background(if (code.isNotBlank()) protocolBadgeColor(code) else A2MColors.Tile),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = Icons.Filled.VpnKey,
-                contentDescription = null,
-                tint = A2MColors.Accent,
-                modifier = Modifier.size(20.dp),
-            )
+            if (code.isNotBlank()) {
+                Text(
+                    text = code,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.VpnKey,
+                    contentDescription = null,
+                    tint = A2MColors.Accent,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
 
         Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = profile.name.ifBlank { "Sans nom" },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = A2MColors.Text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (selected) {
+                    Text(
+                        text = "SÉLECTIONNÉ",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = A2MColors.Accent,
+                        modifier =
+                        Modifier
+                            .clip(A2MShapes.chip)
+                            .background(A2MColors.Tile)
+                            .border(1.dp, A2MColors.Accent.copy(alpha = 0.5f), A2MShapes.chip)
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+            }
             Text(
-                text = profile.name.ifBlank { "Sans nom" },
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = A2MColors.Text,
-            )
-            Text(
-                text = "$protocol · ${A2MProfileInfo.typeLabel(profile)}",
+                text = address?.takeIf { it.isNotBlank() } ?: "$protocol · ${A2MProfileInfo.typeLabel(profile)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = A2MColors.Muted,
-            )
-        }
-
-        if (selected) {
-            Icon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = "Sélectionné",
-                tint = A2MColors.CardBorderSelected,
-                modifier = Modifier.size(22.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
 
@@ -565,6 +630,53 @@ private fun ServerRow(
                 contentDescription = "Supprimer",
                 tint = A2MColors.Muted,
                 modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+/** Champ de recherche compact, style pilule. */
+@Composable
+private fun A2MSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    placeholder: String,
+) {
+    Row(
+        modifier =
+        Modifier
+            .fillMaxWidth()
+            .clip(A2MShapes.chip)
+            .background(A2MColors.CardBrush)
+            .border(1.dp, A2MColors.CardBorder, A2MShapes.chip)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Search,
+            contentDescription = null,
+            tint = A2MColors.Faint,
+            modifier = Modifier.size(18.dp),
+        )
+        androidx.compose.foundation.text.BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            textStyle =
+            MaterialTheme.typography.bodyMedium.copy(color = A2MColors.Text),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(A2MColors.Accent),
+            modifier = Modifier.weight(1f),
+        )
+        if (query.isNotEmpty()) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = "Effacer",
+                tint = A2MColors.Faint,
+                modifier =
+                Modifier
+                    .size(16.dp)
+                    .clickable { onQueryChange("") },
             )
         }
     }

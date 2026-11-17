@@ -2,6 +2,7 @@ package io.nekohasekai.sfa.compose.screen.am
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -9,9 +10,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -44,6 +51,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun A2MSettingsScreen(
     serviceStatus: Status,
+    onNavigate: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val scaffoldPadding = LocalScaffoldPadding.current
@@ -111,6 +119,24 @@ fun A2MSettingsScreen(
                         Settings.allowBypass = it
                         notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
                     },
+                )
+            }
+        }
+
+        item {
+            SettingsCard(title = "Navigation") {
+                SettingLink(
+                    icon = Icons.Filled.SwapVert,
+                    title = "Routage",
+                    subtitle = "Groupes de sortie, routage par application, DNS",
+                    onClick = { onNavigate(io.nekohasekai.sfa.compose.navigation.A2MRoutes.ROUTING) },
+                )
+                HorizontalDivider(color = A2MColors.CardBorder)
+                SettingLink(
+                    icon = Icons.Filled.Description,
+                    title = "Journal",
+                    subtitle = "Journaux du moteur en direct",
+                    onClick = { onNavigate(io.nekohasekai.sfa.compose.navigation.A2MRoutes.JOURNAL) },
                 )
             }
         }
@@ -206,6 +232,51 @@ private fun SettingInfo(
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
             color = A2MColors.Text,
+        )
+    }
+}
+
+@Composable
+private fun SettingLink(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier =
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp, horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = A2MColors.Accent,
+            modifier = Modifier.size(22.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = A2MColors.Text,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = A2MColors.Muted,
+            )
+        }
+        Icon(
+            imageVector = Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = A2MColors.Faint,
+            modifier = Modifier.size(18.dp),
         )
     }
 }

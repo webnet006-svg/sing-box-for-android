@@ -169,6 +169,11 @@ fun NavHost(
         composable(A2MRoutes.SETTINGS) {
             A2MSettingsScreen(
                 serviceStatus = serviceStatus,
+                onNavigate = { route ->
+                    navController.navigate(route) {
+                        launchSingleTop = true
+                    }
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }

@@ -1,19 +1,30 @@
 package io.nekohasekai.sfa.compose.component
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -28,17 +39,19 @@ private data class A2MNavItem(
     val icon: ImageVector,
 )
 
+/** 3 onglets comme SniTunnel : le Routage et le Journal sont accessibles ailleurs. */
 private val A2M_NAV_ITEMS =
     listOf(
-        A2MNavItem(route = A2MRoutes.HOME, label = "Accueil", icon = Icons.Filled.Home),
+        A2MNavItem(route = A2MRoutes.HOME, label = "Connexion", icon = Icons.Filled.Shield),
         A2MNavItem(route = A2MRoutes.SERVERS, label = "Serveurs", icon = Icons.Outlined.Language),
-        A2MNavItem(route = A2MRoutes.ROUTING, label = "Routage", icon = Icons.Filled.SwapVert),
-        A2MNavItem(route = A2MRoutes.SETTINGS, label = "Réglages", icon = Icons.Filled.Settings),
+        A2MNavItem(route = A2MRoutes.SETTINGS, label = "Réglages", icon = Icons.Filled.Tune),
     )
 
+private val A2M_NAV_PILL_SHAPE = RoundedCornerShape(999.dp)
+
 /**
- * Barre de navigation A2M TUN — style nuit cohérent avec le design system :
- * fond sombre translucide, indicateur discret, libellés compacts.
+ * Barre de navigation A2M TUN — pilule flottante façon SniTunnel :
+ * conteneur arrondi sombre translucide, onglet actif = pilule interne teal.
  */
 @Composable
 fun A2MNavigationBar(
@@ -46,34 +59,55 @@ fun A2MNavigationBar(
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    NavigationBar(
-        modifier = modifier,
-        containerColor = Color(0xF007141C),
-        contentColor = A2MColors.Text,
-        tonalElevation = 0.dp,
+    Box(
+        modifier =
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp, vertical = 10.dp),
     ) {
-        A2M_NAV_ITEMS.forEach { item ->
-            val selected = selectedRoute == item.route
-            NavigationBarItem(
-                selected = selected,
-                onClick = { onNavigate(item.route) },
-                colors =
-                NavigationBarItemDefaults.colors(
-                    selectedIconColor = A2MColors.Accent,
-                    selectedTextColor = A2MColors.Accent,
-                    indicatorColor = Color(0xFF0E2A33),
-                    unselectedIconColor = A2MColors.Faint,
-                    unselectedTextColor = A2MColors.Faint,
-                ),
-                icon = { Icon(imageVector = item.icon, contentDescription = item.label) },
-                label = {
+        Row(
+            modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .clip(A2M_NAV_PILL_SHAPE)
+                .background(Color(0xE607141C))
+                .border(1.dp, A2MColors.CardBorder, A2M_NAV_PILL_SHAPE)
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            A2M_NAV_ITEMS.forEach { item ->
+                val selected = selectedRoute == item.route
+                val interactionSource = remember { MutableInteractionSource() }
+                Column(
+                    modifier =
+                    Modifier
+                        .weight(1f)
+                        .clip(A2M_NAV_PILL_SHAPE)
+                        .background(if (selected) Color(0xFF0E2A33) else Color.Transparent)
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                        ) { onNavigate(item.route) }
+                        .padding(vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        imageVector = item.icon,
+                        contentDescription = item.label,
+                        tint = if (selected) A2MColors.Accent else A2MColors.Faint,
+                        modifier = Modifier.size(22.dp),
+                    )
                     Text(
                         text = item.label,
                         fontSize = 11.sp,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (selected) A2MColors.Accent else A2MColors.Faint,
+                        style = MaterialTheme.typography.labelSmall,
                     )
-                },
-            )
+                }
+            }
         }
     }
 }
