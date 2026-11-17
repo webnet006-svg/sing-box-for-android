@@ -32,7 +32,12 @@ object A2MClickFeedback {
                         context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
                     }
                 if (vibrator?.hasVibrator() == true) {
-                    vibrator.vibrate(VibrationEffect.createOneShot(18, VibrationEffect.DEFAULT_AMPLITUDE))
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator.vibrate(VibrationEffect.createOneShot(18, VibrationEffect.DEFAULT_AMPLITUDE))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        vibrator.vibrate(18)
+                    }
                 }
             }
         }
