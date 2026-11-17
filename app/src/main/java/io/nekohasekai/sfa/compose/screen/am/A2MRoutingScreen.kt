@@ -17,9 +17,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -205,9 +209,11 @@ fun A2MRoutingScreen(
                                 groupsState.groups.forEach { group ->
                                     GroupBlock(
                                         group = group,
+                                        isTesting = group.tag in groupsState.testingGroups,
                                         onSelect = { itemTag ->
                                             groupsViewModel.selectGroupItem(group.tag, itemTag)
                                         },
+                                        onUrlTest = { groupsViewModel.urlTestGroup(group.tag) },
                                     )
                                 }
                             }
@@ -455,7 +461,9 @@ private fun SectionHint(text: String) {
 @Composable
 private fun GroupBlock(
     group: Group,
+    isTesting: Boolean,
     onSelect: (String) -> Unit,
+    onUrlTest: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -471,6 +479,26 @@ private fun GroupBlock(
                 style = MaterialTheme.typography.bodySmall,
                 color = A2MColors.Muted,
             )
+            // Test de latence réel du groupe (commande libbox urlTestGroup).
+            if (isTesting) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .padding(start = 10.dp)
+                        .size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = A2MColors.Accent,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.Speed,
+                    contentDescription = "Tester la latence du groupe",
+                    tint = A2MColors.Accent,
+                    modifier = Modifier
+                        .padding(start = 10.dp)
+                        .size(20.dp)
+                        .clickable(onClick = onUrlTest),
+                )
+            }
         }
         if (group.selectable) {
             group.items.forEach { item ->
@@ -529,11 +557,36 @@ private fun GroupItemRow(
             modifier = Modifier.weight(1f),
         )
         if (item.urlTestDelay > 0) {
-            Text(
-                text = "${item.urlTestDelay} ms",
-                style = MaterialTheme.typography.bodySmall,
-                color = A2MColors.Muted,
-            )
+            // Latence colorée façon SniTunnel : vert rapide, ambre moyen, rouge lent.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                Box(
+                    modifier =
+                    Modifier
+                        .size(7.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            when {
+                                item.urlTestDelay <= 120 -> A2MColors.Accent
+                                item.urlTestDelay <= 300 -> A2MColors.Amber
+                                else -> A2MColors.Danger
+                            },
+                        ),
+                )
+                Text(
+                    text = "${item.urlTestDelay} ms",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color =
+                    when {
+                        item.urlTestDelay <= 120 -> A2MColors.Accent
+                        item.urlTestDelay <= 300 -> A2MColors.Amber
+                        else -> A2MColors.Danger
+                    },
+                )
+            }
         }
     }
 }
