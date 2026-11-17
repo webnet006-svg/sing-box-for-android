@@ -140,9 +140,9 @@ fun A2MJournalScreen(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "JOURNAL",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
+                    text = "Journal",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
                     color = A2MColors.Text,
                 )
                 Text(
@@ -224,14 +224,14 @@ private fun LevelChip(
         onClick = onClick,
         modifier =
         Modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(A2MShapes.tile)
             .background(if (selected) A2MColors.BackgroundMid else A2MColors.BackgroundTop),
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) A2MColors.Cyan else A2MColors.Muted,
+            color = if (selected) A2MColors.Accent else A2MColors.Muted,
         )
     }
 }

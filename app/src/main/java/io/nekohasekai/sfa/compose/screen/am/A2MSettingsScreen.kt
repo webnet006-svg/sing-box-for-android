@@ -73,9 +73,9 @@ fun A2MSettingsScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "RÉGLAGES",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
+                    text = "Réglages",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
                     color = A2MColors.Text,
                 )
                 Text(
@@ -143,9 +143,9 @@ private fun SettingsCard(
         modifier =
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(25.dp))
+            .clip(A2MShapes.card)
             .background(A2MColors.CardBrush)
-            .border(1.dp, A2MColors.CardBorder, RoundedCornerShape(25.dp))
+            .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -153,7 +153,7 @@ private fun SettingsCard(
             text = title.uppercase(),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
-            color = A2MColors.Cyan,
+            color = A2MColors.Accent,
         )
         content()
     }

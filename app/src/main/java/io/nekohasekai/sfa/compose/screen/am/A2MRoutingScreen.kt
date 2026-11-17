@@ -175,9 +175,9 @@ fun A2MRoutingScreen(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "ROUTAGE",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
+                        text = "Routage",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
                         color = A2MColors.Text,
                     )
                     Text(
@@ -277,7 +277,7 @@ fun A2MRoutingScreen(
                             TextButton(onClick = { showAppPicker = true }) {
                                 Text(
                                     text = "Choisir les applications (${Settings.perAppProxyList.size})",
-                                    color = A2MColors.Cyan,
+                                    color = A2MColors.Accent,
                                     fontWeight = FontWeight.Bold,
                                 )
                             }
@@ -342,11 +342,11 @@ fun A2MRoutingScreen(
                             showPrivilegeDialog = false
                         },
                     ) {
-                        Text("Demander l'autorisation Shizuku", color = A2MColors.Cyan, fontWeight = FontWeight.Bold)
+                        Text("Demander l'autorisation Shizuku", color = A2MColors.Accent, fontWeight = FontWeight.Bold)
                     }
                 } else {
                     TextButton(onClick = { showPrivilegeDialog = false }) {
-                        Text("Compris", color = A2MColors.Cyan, fontWeight = FontWeight.Bold)
+                        Text("Compris", color = A2MColors.Accent, fontWeight = FontWeight.Bold)
                     }
                 }
             },
@@ -406,7 +406,7 @@ fun A2MRoutingScreen(
                         notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
                     },
                 ) {
-                    Text("Enregistrer", color = A2MColors.Cyan, fontWeight = FontWeight.Bold)
+                    Text("Enregistrer", color = A2MColors.Accent, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -427,9 +427,9 @@ private fun SectionCard(
         modifier =
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(25.dp))
+            .clip(A2MShapes.card)
             .background(A2MColors.CardBrush)
-            .border(1.dp, A2MColors.CardBorder, RoundedCornerShape(25.dp))
+            .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -437,7 +437,7 @@ private fun SectionCard(
             text = title.uppercase(),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
-            color = A2MColors.Cyan,
+            color = A2MColors.Accent,
         )
         content()
     }
@@ -501,7 +501,7 @@ private fun GroupItemRow(
         modifier =
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(A2MShapes.tile)
             .background(
                 if (selected) {
                     A2MColors.BackgroundMid
@@ -547,12 +547,12 @@ private fun ModeChoice(
     Box(
         modifier =
         Modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(A2MShapes.tile)
             .background(if (selected) A2MColors.BackgroundMid else A2MColors.BackgroundTop)
             .border(
                 1.dp,
                 if (selected) A2MColors.CardBorderSelected else A2MColors.CardBorder,
-                RoundedCornerShape(14.dp),
+                A2MShapes.tile,
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -561,7 +561,7 @@ private fun ModeChoice(
             text = label,
             style = MaterialTheme.typography.bodySmall,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) A2MColors.Cyan else A2MColors.Muted,
+            color = if (selected) A2MColors.Accent else A2MColors.Muted,
         )
     }
 }

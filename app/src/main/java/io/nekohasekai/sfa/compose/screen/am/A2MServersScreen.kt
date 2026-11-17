@@ -174,9 +174,9 @@ fun A2MServersScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "SERVEURS",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
+                            text = "Serveurs",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
                             color = A2MColors.Text,
                         )
                         Text(
@@ -197,7 +197,7 @@ fun A2MServersScreen(
                         Icon(
                             imageVector = Icons.Filled.Add,
                             contentDescription = "Importer un serveur",
-                            tint = A2MColors.Cyan,
+                            tint = A2MColors.Accent,
                         )
                     }
                 }
@@ -333,7 +333,7 @@ fun A2MServersScreen(
                         }
                     },
                 ) {
-                    Text("Importer", color = A2MColors.Cyan, fontWeight = FontWeight.Bold)
+                    Text("Importer", color = A2MColors.Accent, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -375,7 +375,7 @@ fun A2MServersScreen(
                         }
                     },
                 ) {
-                    Text("Importer", color = A2MColors.Cyan, fontWeight = FontWeight.Bold)
+                    Text("Importer", color = A2MColors.Accent, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -393,7 +393,7 @@ fun A2MServersScreen(
             text = { Text(message, color = A2MColors.Muted) },
             confirmButton = {
                 TextButton(onClick = { importMessage = null }) {
-                    Text("OK", color = A2MColors.Cyan, fontWeight = FontWeight.Bold)
+                    Text("OK", color = A2MColors.Accent, fontWeight = FontWeight.Bold)
                 }
             },
         )
@@ -464,7 +464,7 @@ private fun ImportOption(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = A2MColors.Cyan,
+            tint = A2MColors.Accent,
             modifier = Modifier.size(24.dp),
         )
         Column(modifier = Modifier.weight(1f)) {
@@ -497,12 +497,12 @@ private fun ServerRow(
         modifier =
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(25.dp))
+            .clip(A2MShapes.card)
             .background(A2MColors.CardBrush)
             .border(
-                width = if (selected) 1.5.dp else 1.dp,
+                width = 1.dp,
                 color = if (selected) A2MColors.CardBorderSelected else A2MColors.CardBorder,
-                shape = RoundedCornerShape(25.dp),
+                shape = A2MShapes.card,
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -512,16 +512,16 @@ private fun ServerRow(
         Box(
             modifier =
             Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(A2MColors.BackgroundMid),
+                .size(42.dp)
+                .clip(A2MShapes.tile)
+                .background(A2MColors.Tile),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = Icons.Filled.VpnKey,
                 contentDescription = null,
-                tint = A2MColors.Cyan,
-                modifier = Modifier.size(26.dp),
+                tint = A2MColors.Accent,
+                modifier = Modifier.size(20.dp),
             )
         }
 
@@ -554,7 +554,7 @@ private fun ServerRow(
                     text = if (autoUpdate) "MàJ auto" else "MàJ auto off",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = if (autoUpdate) A2MColors.Cyan else A2MColors.Muted,
+                    color = if (autoUpdate) A2MColors.Accent else A2MColors.Muted,
                 )
             }
         }
@@ -576,19 +576,28 @@ private fun EmptyServersCard(onImport: () -> Unit) {
         modifier =
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(25.dp))
+            .clip(A2MShapes.card)
             .background(A2MColors.CardBrush)
-            .border(1.dp, A2MColors.CardBorder, RoundedCornerShape(25.dp))
+            .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(
-            imageVector = Icons.Filled.VpnKey,
-            contentDescription = null,
-            tint = A2MColors.Cyan,
-            modifier = Modifier.size(40.dp),
-        )
+        Box(
+            modifier =
+            Modifier
+                .size(52.dp)
+                .clip(A2MShapes.tile)
+                .background(A2MColors.Tile),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.VpnKey,
+                contentDescription = null,
+                tint = A2MColors.Accent,
+                modifier = Modifier.size(24.dp),
+            )
+        }
         Text(
             text = "Aucun serveur",
             style = MaterialTheme.typography.titleMedium,
@@ -601,7 +610,7 @@ private fun EmptyServersCard(onImport: () -> Unit) {
             color = A2MColors.Muted,
         )
         TextButton(onClick = onImport) {
-            Text("Importer", color = A2MColors.Cyan, fontWeight = FontWeight.Bold)
+            Text("Importer", color = A2MColors.Accent, fontWeight = FontWeight.Bold)
         }
     }
 }
