@@ -69,7 +69,7 @@ import kotlinx.coroutines.withContext
 import android.provider.Settings as AndroidSettings
 
 /**
- * Écran Paramètres A2M TUN — transplant du système ONFAA, adapté au moteur réel.
+ * Écran Paramètres A2M TUN — toutes les entrées agissent sur le moteur réel.
  *
  * Règle d'honnêteté adaptée au projet : les options déjà câblées au moteur
  * (notification dynamique, bloqueur, DNS, MTU, mux, hotspot, routage, logs)
@@ -111,7 +111,7 @@ fun A2MSettingsScreen(
     // Options mémorisées (réelles + persistées) lues à chaque recomposition.
     var adBlock by remember { mutableStateOf(Settings.adBlockEnabled) }
 
-    // Entrées de recherche (façon ONFAA : 12 destinations réelles).
+    // Entrées de recherche : 12 destinations réelles.
     data class Entry(val title: String, val subtitle: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val route: String, val keywords: List<String>)
 
     val entries =

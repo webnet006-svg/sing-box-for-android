@@ -15,6 +15,8 @@ object TransferRules {
     fun normalizeUrl(raw: String): String? {
         val trimmed = raw.trim()
         if (trimmed.isEmpty() || trimmed.length > MAX_URL_LENGTH) return null
+        // Aucun espace : une URL contenant des blancs n'est pas exploitable telle quelle.
+        if (trimmed.any { it.isWhitespace() }) return null
         val lower = trimmed.lowercase(Locale.ROOT)
         if (!lower.startsWith("https://") && !lower.startsWith("http://")) return null
         val withoutScheme = trimmed.substringAfter("://")
@@ -30,7 +32,12 @@ object TransferRules {
     /** Nom de fichier proposé à partir du chemin de l'URL. */
     fun fileNameFromUrl(url: String): String {
         val withoutQuery = url.substringBefore('?').substringBefore('#')
-        val last = withoutQuery.trimEnd('/').substringAfterLast('/')
+        val schemeEnd = withoutQuery.indexOf("://")
+        val rest =
+            if (schemeEnd >= 0) withoutQuery.substring(schemeEnd + 3) else withoutQuery
+        // Chemin seul : « hôte/ » ou « hôte » n'ont pas de nom de fichier.
+        val path = rest.substringAfter('/', missingDelimiterValue = "")
+        val last = path.trimEnd('/').substringAfterLast('/')
         val decoded =
             try {
                 URLDecoder.decode(last, "UTF-8")
@@ -54,9 +61,10 @@ object TransferRules {
         transferred: Long,
         total: Long,
     ): String {
-        if (total <= 0L) return formatBytes(transferred)
-        val percent = ((transferred.coerceAtLeast(0L) * 100) / total).coerceIn(0L, 100L)
-        return "${formatBytes(transferred)} / ${formatBytes(total)} ($percent %)"
+        val sent = transferred.coerceAtLeast(0L)
+        if (total <= 0L) return formatBytes(sent)
+        val percent = ((sent * 100) / total).coerceIn(0L, 100L)
+        return "${formatBytes(sent)} / ${formatBytes(total)} ($percent %)"
     }
 
     /** Tailles façon française : o, Ko, Mo, Go (une décimale à partir de Ko). */

@@ -39,7 +39,7 @@ import androidx.compose.ui.unit.dp
 import io.nekohasekai.sfa.database.Settings
 
 /**
- * Composants de réglages façon ONFAA, adaptés au design system A2M.
+ * Composants de réglages du design system A2M.
  * Utilisés par l'écran Paramètres et ses sous-écrans.
  */
 
@@ -273,7 +273,7 @@ fun A2MDividerLine(inset: androidx.compose.ui.unit.Dp = 0.dp) {
     )
 }
 
-/** Bandeau d'information (« honnêteté d'état », notices ONFAA). */
+/** Bandeau d'information (« honnêteté d'état »). */
 @Composable
 fun A2MSettingsNotice(text: String) {
     Row(

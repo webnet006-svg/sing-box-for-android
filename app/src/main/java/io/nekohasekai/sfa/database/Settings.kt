@@ -70,9 +70,12 @@ object Settings {
     var dynamicNotification by dataStore.boolean(SettingsKey.DYNAMIC_NOTIFICATION) { true }
     var disableDeprecatedWarnings by dataStore.boolean(SettingsKey.DISABLE_DEPRECATED_WARNINGS) { false }
 
-    // ── Apparence (transplant ONFAA) : palette + mode, appliqués à toute l'UI ──
+    // ── Apparence : palette + mode, appliqués à toute l'UI ──
     var themeKey by dataStore.string(SettingsKey.THEME_KEY) { "a2m" }
     var themeMode by dataStore.string(SettingsKey.THEME_MODE) { "light" }
+
+    /** Thème personnalisé actif, encodé en `.a2mtheme` compact (vide = aucun). */
+    var customTheme by dataStore.string(SettingsKey.CUSTOM_THEME) { "" }
 
     // ── Options persistées dont l'effet moteur n'est pas encore raccordé ──
     // (notice d'honnêteté affichée dans l'interface ; aucun effet simulé).

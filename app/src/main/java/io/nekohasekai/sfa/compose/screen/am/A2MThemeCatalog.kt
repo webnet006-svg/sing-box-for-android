@@ -4,10 +4,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import io.nekohasekai.sfa.dams.theme.ThemePackage
 import io.nekohasekai.sfa.database.Settings
 
 /**
- * Catalogue de thèmes A2M TUN (transplant du système ONFAA, adapté).
+ * Catalogue de thèmes A2M TUN : palettes intégrées, thème personnalisé et
+ * paquets `.a2mtheme` importables.
  *
  * 8 palettes × 2 modes (clair/sombre) = 16 combinaisons, appliquées à TOUTE
  * l'application via [A2MColors] (états Compose : recoloration instantanée).
@@ -90,7 +93,7 @@ object A2MThemeCatalog {
             amber = parse(amber),
         )
 
-    /** Palettes : la signature « a2m » reproduit le visuel de référence, puis les 7 inspirées d'ONFAA. */
+    /** Palettes intégrées : signature « a2m » puis 7 variantes claires/sombres. */
     val palettes: List<A2MPalette> = buildList {
         // ── a2m (signature) ─────────────────────────────────────────────
         add(
@@ -110,10 +113,10 @@ object A2MThemeCatalog {
             ),
         )
 
-        // ── onfaa (inspiré ONFAA : bleu nuit + cyan) ────────────────────
+        // ── azure (bleu nuit + cyan) ────────────────────────────────────
         add(
             A2MPalette(
-                "onfaa", "ONFAA", "Bleu nuit profond, accents cyan",
+                "azure", "Azur", "Bleu nuit profond, accents cyan",
                 true,
                 t("0xFF04152B", "0xFF010812", "0xFF19D8F5", "0xFF2F80FF", "0xFFE8F4FF", "0xFF7FA0C4", "0xFF48688C", "0xFF16294A", "0xFF0D2949", "0xFF0A1E38", "0xFF122A4D", "0xFFFF5C6C", "0xFFF5A524"),
                 emptyList(),
@@ -121,7 +124,7 @@ object A2MThemeCatalog {
         )
         add(
             A2MPalette(
-                "onfaa", "ONFAA", "Bleu clair aérien, accents cyan",
+                "azure", "Azur", "Bleu clair aérien, accents cyan",
                 false,
                 t("0xFFE3F2FF", "0xFFF8FBFF", "0xFF0E9FD8", "0xFF2F80FF", "0xFF0A1E38", "0xFF4A6B8C", "0xFF8FABC8", "0xFFD2E4F7", "0xFFFFFFFF", "0xFFF2F8FE", "0xFFE2EEF9", "0xFFE5484D", "0xFFD97706"),
                 emptyList(),
@@ -241,19 +244,114 @@ object A2MThemeCatalog {
     private fun previewFor(p: A2MPalette): List<Color> =
         listOf(p.tokens.backgroundTop, p.tokens.accent, p.tokens.accentUpload, p.tokens.cardTop)
 
-    fun forId(id: String, dark: Boolean): A2MPalette =
-        palettes.firstOrNull { it.id == id && it.isDark == dark }
+    // ── Thème personnalisé (.a2mtheme) ──────────────────────────────────
+
+    /** Identifiant stable du thème personnalisé (persisté dans Settings.themeKey). */
+    const val CUSTOM_ID = "custom"
+
+    /** Couleurs proposées dans l'éditeur (accent et accent secondaire). */
+    val ACCENT_SWATCHES: List<String> =
+        listOf(
+            "#FF16E0C4",
+            "#FF0FA98F",
+            "#FF19D8F5",
+            "#FF2F80FF",
+            "#FF7C5CFF",
+            "#FFB582FF",
+            "#FFE040FB",
+            "#FFFF8A4C",
+            "#FFE0642A",
+            "#FF6ED47E",
+            "#FF4C9EE8",
+            "#FFFF5C6C",
+        )
+
+    private fun tokensFromHex(colors: Map<String, String>): A2MPaletteTokens =
+        t(
+            colors.getValue("backgroundTop"),
+            colors.getValue("backgroundMid"),
+            colors.getValue("accent"),
+            colors.getValue("accentUpload"),
+            colors.getValue("text"),
+            colors.getValue("textMuted"),
+            colors.getValue("faint"),
+            colors.getValue("border"),
+            colors.getValue("cardTop"),
+            colors.getValue("cardBottom"),
+            colors.getValue("tile"),
+            colors.getValue("danger"),
+            colors.getValue("amber"),
+        )
+
+    /** Convertit un paquet `.a2mtheme` en palette applicable par l'interface. */
+    fun paletteFromPackage(data: ThemePackage.Data): A2MPalette {
+        val palette =
+            A2MPalette(
+                CUSTOM_ID,
+                data.name.ifBlank { "Personnalisé" },
+                "Thème personnalisé importé ou créé dans l'application",
+                data.dark,
+                tokensFromHex(data.colors),
+                emptyList(),
+            )
+        return palette.copy(preview = previewFor(palette))
+    }
+
+    /** Thème personnalisé enregistré, ou `null` s'il n'y en a pas. */
+    fun storedCustom(): ThemePackage.Data? = ThemePackage.decode(Settings.customTheme)
+
+    /** Thème personnalisé actif (créé par défaut si aucun n'a été enregistré). */
+    fun customPalette(): A2MPalette =
+        paletteFromPackage(
+            storedCustom() ?: ThemePackage.derive(dark = true, accent = "#FF16E0C4", accentUpload = "#FF7C5CFF"),
+        )
+
+    /** Sérialise une palette intégrée pour l'export `.a2mtheme`. */
+    fun packageOf(palette: A2MPalette): ThemePackage.Data =
+        ThemePackage.Data(
+            name = palette.label,
+            dark = palette.isDark,
+            colors =
+                linkedMapOf(
+                    "backgroundTop" to hexOf(palette.tokens.backgroundTop),
+                    "backgroundMid" to hexOf(palette.tokens.backgroundMid),
+                    "accent" to hexOf(palette.tokens.accent),
+                    "accentUpload" to hexOf(palette.tokens.accentUpload),
+                    "text" to hexOf(palette.tokens.text),
+                    "textMuted" to hexOf(palette.tokens.textMuted),
+                    "faint" to hexOf(palette.tokens.faint),
+                    "border" to hexOf(palette.tokens.border),
+                    "cardTop" to hexOf(palette.tokens.cardTop),
+                    "cardBottom" to hexOf(palette.tokens.cardBottom),
+                    "tile" to hexOf(palette.tokens.tile),
+                    "danger" to hexOf(palette.tokens.danger),
+                    "amber" to hexOf(palette.tokens.amber),
+                ),
+        )
+
+    private fun hexOf(color: Color): String = String.format("#%08X", color.toArgb())
+
+    fun forId(id: String, dark: Boolean): A2MPalette {
+        // Migration douce : l'ancien identifiant « onfaa » désigne désormais « azure ».
+        val key = if (id == "onfaa") "azure" else id
+        if (key == CUSTOM_ID) return customPalette()
+        return palettes.firstOrNull { it.id == key && it.isDark == dark }
             ?: palettes.first { it.id == "a2m" && !it.isDark }
+    }
 
     fun paletteIds(): List<Pair<String, String>> =
         palettes
             .filter { !it.isDark }
-            .map { it.id to it.label }
+            .map { it.id to it.label } + (CUSTOM_ID to "Personnalisé")
 }
 
 /** État de thème global : charge, persiste et applique la combinaison choisie. */
 object A2MThemeState {
     var settings by mutableStateOf(A2MThemeSettings())
+        private set
+
+    /** Incrémenté à chaque application d'un thème personnalisé (recomposition). */
+    var customRevision by mutableStateOf(0)
         private set
 
     /** Config système claire/sombre, mise à jour depuis l'interface (mode SYSTEM). */
@@ -279,7 +377,16 @@ object A2MThemeState {
 
     /** Charge les préférences persistées au démarrage de l'application. */
     fun load() {
-        settings = A2MThemeSettings(paletteId = Settings.themeKey, mode = A2MThemeMode.fromKey(Settings.themeMode))
+        val savedKey = Settings.themeKey
+        // Migration douce de l'ancien identifiant de palette « onfaa ».
+        val key =
+            when (savedKey) {
+                "onfaa" -> "azure"
+                "" -> "a2m"
+                else -> savedKey
+            }
+        if (key != savedKey) Settings.themeKey = key
+        settings = A2MThemeSettings(paletteId = key, mode = A2MThemeMode.fromKey(Settings.themeMode))
         applySettings()
     }
 
@@ -293,6 +400,35 @@ object A2MThemeState {
         settings = settings.copy(mode = mode)
         Settings.themeMode = mode.key
         applySettings()
+    }
+
+    /** Enregistre et applique un thème personnalisé (créé ou importé). */
+    fun applyCustom(data: ThemePackage.Data) {
+        Settings.customTheme = ThemePackage.encodeCompact(data)
+        settings = settings.copy(paletteId = A2MThemeCatalog.CUSTOM_ID)
+        Settings.themeKey = A2MThemeCatalog.CUSTOM_ID
+        customRevision++
+        applySettings()
+    }
+
+    /** Crée (et applique) un thème personnalisé à partir des choix de l'éditeur. */
+    fun applyDerivedCustom(
+        dark: Boolean,
+        accent: String,
+        accentUpload: String,
+        name: String = "Personnalisé",
+    ) {
+        applyCustom(ThemePackage.derive(dark, accent, accentUpload, name))
+    }
+
+    /** Paquet `.a2mtheme` correspondant au thème actuellement appliqué. */
+    fun currentPackage(): ThemePackage.Data {
+        val palette = currentPalette()
+        return if (palette.id == A2MThemeCatalog.CUSTOM_ID) {
+            A2MThemeCatalog.storedCustom() ?: A2MThemeCatalog.packageOf(palette)
+        } else {
+            A2MThemeCatalog.packageOf(palette)
+        }
     }
 
     /** Applique immédiatement la palette résolue. */

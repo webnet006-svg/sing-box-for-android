@@ -35,6 +35,8 @@ object DailyTrafficLog {
                 if (parts.size != 3) return@mapNotNull null
                 val date = parts[0]
                 if (!DATE_PATTERN.matches(date)) return@mapNotNull null
+                // Rejette les dates impossibles (mois 13, 31 février…).
+                if (runCatching { LocalDate.parse(date) }.isFailure) return@mapNotNull null
                 val download = parts[1].toLongOrNull() ?: return@mapNotNull null
                 val upload = parts[2].toLongOrNull() ?: return@mapNotNull null
                 if (download < 0 || upload < 0) return@mapNotNull null

@@ -28,9 +28,12 @@ object SettingsKey {
     const val AD_BLOCK_ENABLED = "ad_block_enabled"
     const val SYSTEM_PROXY_ENABLED = "system_proxy_enabled"
 
-    // Apparence (thèmes, façon ONFAA : palette + mode, appliqués à toute l'interface).
+    // Apparence : palette + mode appliqués à toute l'interface, thème personnalisé.
     const val THEME_KEY = "theme_key"
     const val THEME_MODE = "theme_mode"
+
+    /** Thème personnalisé : paquet JSON `.a2mtheme` compact (13 couleurs). */
+    const val CUSTOM_THEME = "custom_theme"
 
     // Options anti-censure et modes avancés : persistées et affichées, notice
     // « non raccordé au moteur » tant que la décoration correspondante n'existe pas.
