@@ -252,8 +252,8 @@ private fun LogLine(log: ProcessedLogEntry) {
 
 private fun levelColor(level: LogLevel): Color =
     when (level) {
-        LogLevel.PANIC, LogLevel.FATAL, LogLevel.ERROR -> Color(0xFFFF7A90)
-        LogLevel.WARNING -> Color(0xFFFFC46B)
+        LogLevel.PANIC, LogLevel.FATAL, LogLevel.ERROR -> Color(0xFFE5484D)
+        LogLevel.WARNING -> Color(0xFFD97706)
         LogLevel.INFO -> A2MColors.Text
         LogLevel.DEBUG, LogLevel.TRACE -> A2MColors.Muted
         LogLevel.Default -> A2MColors.Text

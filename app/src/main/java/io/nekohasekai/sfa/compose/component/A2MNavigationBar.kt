@@ -73,7 +73,7 @@ fun A2MNavigationBar(
                 .fillMaxWidth()
                 .height(64.dp)
                 .clip(A2M_NAV_PILL_SHAPE)
-                .background(Color(0xE607141C))
+                .background(Color(0xF2FFFFFF))
                 .border(1.dp, A2MColors.CardBorder, A2M_NAV_PILL_SHAPE)
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -86,7 +86,7 @@ fun A2MNavigationBar(
                     Modifier
                         .weight(1f)
                         .clip(A2M_NAV_PILL_SHAPE)
-                        .background(if (selected) Color(0xFF0E2A33) else Color.Transparent)
+                        .background(if (selected) Color(0xFFD9F2EA) else Color.Transparent)
                         .clickable(
                             interactionSource = interactionSource,
                             indication = null,

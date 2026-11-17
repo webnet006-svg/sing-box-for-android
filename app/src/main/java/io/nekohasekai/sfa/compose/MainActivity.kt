@@ -68,6 +68,8 @@ import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.core.view.WindowCompat
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -477,6 +479,20 @@ class MainActivity :
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentDestination = navBackStackEntry?.destination
         val currentRoute = currentDestination?.route
+
+        // Fond A2M clair : icônes de barre système sombres sur les routes A2M.
+        val isA2MRoute = currentRoute?.startsWith(A2M_TUN_ROUTE_PREFIX) == true
+        if (isA2MRoute) {
+            SideEffect {
+                window?.let { w ->
+                    WindowCompat.getInsetsController(w, w.decorView).apply {
+                        isAppearanceLightStatusBars = true
+                        isAppearanceLightNavigationBars = true
+                    }
+                }
+            }
+        }
+
         val scope = rememberCoroutineScope()
         val importHandler = remember { ProfileImportHandler(this@MainActivity) }
 
@@ -736,33 +752,6 @@ class MainActivity :
 
         LaunchedEffect(currentServiceStatus) {
             dashboardViewModel.updateServiceStatus(currentServiceStatus)
-        }
-
-        if (dashboardUiState.showDeprecatedDialog && dashboardUiState.deprecatedNotes.isNotEmpty()) {
-            val note = dashboardUiState.deprecatedNotes.first()
-            AlertDialog(
-                onDismissRequest = { },
-                title = { Text(stringResource(R.string.error_deprecated_warning)) },
-                text = { Text(note.message) },
-                confirmButton = {
-                    TextButton(onClick = { dashboardViewModel.dismissDeprecatedNote() }) {
-                        Text(stringResource(R.string.ok))
-                    }
-                },
-                dismissButton =
-                if (!note.migrationLink.isNullOrBlank()) {
-                    {
-                        TextButton(onClick = {
-                            dashboardViewModel.sendGlobalEvent(UiEvent.OpenUrl(note.migrationLink))
-                            dashboardViewModel.dismissDeprecatedNote()
-                        }) {
-                            Text(stringResource(R.string.error_deprecated_documentation))
-                        }
-                    }
-                } else {
-                    null
-                },
-            )
         }
 
         val isSettingsSubScreen = currentRoute?.startsWith("settings/") == true

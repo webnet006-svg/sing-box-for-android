@@ -12,23 +12,24 @@ import androidx.compose.ui.unit.dp
  * surfaces en dégradé subtil, bordures discrètes, grands chiffres de débit.
  */
 object A2MColors {
-    val BackgroundTop = Color(0xFF030C14)
-    val BackgroundMid = Color(0xFF06161F)
-    val Accent = Color(0xFF16E0C4)
-    val Text = Color(0xFFF2FAF9)
-    val Muted = Color(0xFF9FB8BD)
-    val Faint = Color(0xFF5E7B80)
-    val CardBorder = Color(0xFF1B3540)
-    val CardBorderSelected = Color(0xFF2AD9C0)
-    val AccentUpload = Color(0xFF9B5CFF)
-    val Danger = Color(0xFFFF5C7A)
-    val Amber = Color(0xFFFFC24B)
+    // Palette claire (visuel de référence : fond menthe très pâle, cartes blanches, teal profond)
+    val BackgroundTop = Color(0xFFDDF3EE)
+    val BackgroundMid = Color(0xFFF7FBFA)
+    val Accent = Color(0xFF0FA98F)
+    val Text = Color(0xFF0D2B33)
+    val Muted = Color(0xFF54787F)
+    val Faint = Color(0xFF93B3B8)
+    val CardBorder = Color(0xFFD8E8E5)
+    val CardBorderSelected = Color(0xFF0FA98F)
+    val AccentUpload = Color(0xFF7C5CFF)
+    val Danger = Color(0xFFE5484D)
+    val Amber = Color(0xFFD97706)
 
-    /** Surface d'une tuile interne (icône, chip) légèrement plus claire que la carte. */
-    val Tile = Color(0xFF0E2A33)
+    /** Surface d'une tuile interne (icône, chip) légèrement plus sombre que la carte. */
+    val Tile = Color(0xFFE3F2EE)
 
-    val BackgroundBrush = Brush.verticalGradient(listOf(BackgroundTop, BackgroundMid, BackgroundTop))
-    val CardBrush = Brush.linearGradient(listOf(Color(0xFF0B2231), Color(0xFF071520)))
+    val BackgroundBrush = Brush.verticalGradient(listOf(BackgroundTop, BackgroundMid, BackgroundMid))
+    val CardBrush = Brush.linearGradient(listOf(Color.White, Color(0xFFF4FAF8)))
 }
 
 /**

@@ -115,7 +115,7 @@ internal fun A2MQuickChip(
             text = label,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            color = if (selected) Color(0xFF0A1424) else A2MColors.Text,
+            color = A2MColors.Text,
         )
     }
 }
