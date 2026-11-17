@@ -26,7 +26,6 @@ object A2MColors {
 
     /** Surface d'une tuile interne (icône, chip) légèrement plus claire que la carte. */
     val Tile = Color(0xFF0E2A33)
-    val BackgroundMid = Color(0xFF0A2028)
 
     val BackgroundBrush = Brush.verticalGradient(listOf(BackgroundTop, BackgroundMid, BackgroundTop))
     val CardBrush = Brush.linearGradient(listOf(Color(0xFF0B2231), Color(0xFF071520)))

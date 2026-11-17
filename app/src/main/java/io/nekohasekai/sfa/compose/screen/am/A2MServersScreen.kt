@@ -453,11 +453,11 @@ private fun ImportOption(
         modifier =
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(A2MShapes.card)
             .background(A2MColors.CardBrush)
-            .border(1.dp, A2MColors.CardBorder, RoundedCornerShape(20.dp))
+            .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
