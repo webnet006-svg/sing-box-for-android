@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -80,6 +81,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun A2MServersScreen(
     dashboardViewModel: DashboardViewModel,
+    onEditProfile: (Long) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val uiState by dashboardViewModel.uiState.collectAsState()
@@ -294,6 +296,7 @@ fun A2MServersScreen(
                         },
                         onDelete = { pendingDelete = profile },
                         onShare = { shareProfile(profile) },
+                        onEdit = { onEditProfile(profile.id) },
                     )
                 }
             }
@@ -563,6 +566,7 @@ private fun ServerRow(
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onShare: () -> Unit,
+    onEdit: () -> Unit,
 ) {
     Row(
         modifier =
@@ -650,6 +654,15 @@ private fun ServerRow(
                     color = if (autoUpdate) A2MColors.Accent else A2MColors.Muted,
                 )
             }
+        }
+
+        IconButton(onClick = onEdit) {
+            Icon(
+                imageVector = Icons.Filled.Edit,
+                contentDescription = "Modifier",
+                tint = A2MColors.Muted,
+                modifier = Modifier.size(20.dp),
+            )
         }
 
         IconButton(onClick = onShare) {

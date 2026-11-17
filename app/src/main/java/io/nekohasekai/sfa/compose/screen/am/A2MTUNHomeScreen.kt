@@ -74,7 +74,9 @@ import io.nekohasekai.sfa.compose.screen.dashboard.DashboardUiState
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardViewModel
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
 import io.nekohasekai.sfa.constant.Status
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 private val A2M_ORB_BRUSH = Brush.radialGradient(listOf(Color(0xFF116D7C), Color(0xFF0A4B5A)))
 private val A2M_ORB_GLOW = Brush.radialGradient(listOf(Color(0x3D0FA98F), Color(0x000FA98F)))
@@ -102,6 +104,16 @@ fun A2MTUNHomeScreen(
 
     var toastMessage by remember { mutableStateOf<String?>(null) }
     var connectionError by remember { mutableStateOf(false) }
+
+    // IP réelle du réseau mobile : relue depuis le système toutes les 3 s tant que
+    // l'écran est visible (fonctionne même sans data active).
+    var cellularIp by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            cellularIp = withContext(Dispatchers.IO) { readCellularIp() }
+            delay(3000)
+        }
+    }
 
     // Chrono de session : démarre au passage réel à Started (donnée du moteur, pas un ornement).
     var connectedAt by remember { mutableLongStateOf(0L) }
@@ -250,10 +262,11 @@ fun A2MTUNHomeScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // ── Configuration actuelle : nom du serveur sélectionné seulement ──
+            // ── Configuration actuelle : nom du serveur + IP du réseau mobile ──
             A2MConfigNameCard(
                 hasServer = uiState.selectedProfileId != -1L,
                 name = uiState.selectedProfileName,
+                cellularIp = cellularIp,
                 onClick = { onNavigate(A2MRoutes.SERVERS) },
             )
 
@@ -684,6 +697,7 @@ private fun RowScope.VerticalRule() {
 private fun A2MConfigNameCard(
     hasServer: Boolean,
     name: String?,
+    cellularIp: String?,
     onClick: () -> Unit,
 ) {
     Column(
@@ -730,5 +744,52 @@ private fun A2MConfigNameCard(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 10.dp),
         )
+
+        // IP réelle du réseau mobile : lue sur l'interface cellulaire de l'appareil
+        // (rmnet/ccmni/wwan…), présente dès l'enregistrement au réseau, même sans data.
+        Text(
+            text = "IP du réseau mobile",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = A2MColors.Muted,
+            modifier = Modifier.padding(top = 14.dp),
+        )
+        Text(
+            text = cellularIp ?: "—",
+            style = MaterialTheme.typography.displaySmall,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            color = if (cellularIp != null) A2MColors.Accent else A2MColors.Faint,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
+
+/**
+ * IP IPv4 réelle du réseau mobile : énumère les interfaces réseau de l'appareil.
+ * Priorité aux interfaces cellulaires nommées (rmnet, ccmni, ccemni, wwan…),
+ * sinon première interface non exclue (wlan/tun/usb ignorés). Aucune requête
+ * réseau : la donnée vient du système. Retourne null quand aucune interface
+ * n'a d'adresse (affichage « — »).
+ */
+private fun readCellularIp(): String? =
+    runCatching {
+        val interfaces =
+            java.net.NetworkInterface.getNetworkInterfaces().asSequence()
+                .filter { it.isUp && !it.isLoopback }
+                .toList()
+        val v4: (java.net.NetworkInterface) -> String? = { iface ->
+            iface.inetAddresses.asSequence()
+                .filter { it is java.net.Inet4Address && !it.isLoopbackAddress && !it.isAnyLocalAddress }
+                .firstOrNull()?.hostAddress
+        }
+        val cellular = listOf("rmnet", "ccmni", "ccemni", "wwan")
+        val excluded = listOf("wlan", "swlan", "tun", "tap", "lo", "dummy", "usb")
+        interfaces
+            .filter { iface -> cellular.any { iface.name.lowercase().contains(it) } }
+            .firstNotNullOfOrNull(v4)
+            ?: interfaces
+                .filter { iface -> excluded.none { iface.name.lowercase().contains(it) } }
+                .firstNotNullOfOrNull(v4)
+    }.getOrNull()

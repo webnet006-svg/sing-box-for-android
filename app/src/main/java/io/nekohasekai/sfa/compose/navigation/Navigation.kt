@@ -165,6 +165,11 @@ fun NavHost(
         composable(A2MRoutes.SERVERS) {
             A2MServersScreen(
                 dashboardViewModel = dashboardViewModel ?: viewModel(),
+                onEditProfile = { profileId ->
+                    navController.navigate(ProfileRoutes.editProfile(profileId)) {
+                        launchSingleTop = true
+                    }
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }
