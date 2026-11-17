@@ -103,6 +103,28 @@ internal fun parseIpRules(raw: String): List<Pair<Char, String>> =
         }
         .filter { (_, value) -> value.isNotEmpty() }
 
+/**
+ * Liste d'adresses IP valides intégrée par défaut (préfixes à deux octets,
+ * format opérateur « 10.xx »). Elle reste utilisée tant que l'utilisateur
+ * n'a pas saisi sa propre liste.
+ */
+internal val DEFAULT_IP_RULES: String =
+    "10.41;10.43;10.46;10.63;10.67;10.74;10.75;10.77;10.102;10.104;10.143;" +
+        "10.161;10.165;10.193;10.194;10.195;10.196;10.197;10.198;10.199;10.204;" +
+        "10.205;10.206;10.207;10.208;10.209;10.210;10.212;10.213;10.214;10.215;" +
+        "10.216;10.217;10.218;10.219;10.220;10.221;10.222;10.223;10.224;10.225;" +
+        "10.226;10.227;10.228;10.229;10.230;10.231;10.232;10.233;10.234;10.235;" +
+        "10.236;10.237;10.238;10.244;10.245;10.246"
+
+/**
+ * Règles effectives : liste personnalisée si l'utilisateur en a saisi une,
+ * sinon liste par défaut embarquée.
+ */
+internal fun effectiveIpRules(raw: String): List<Pair<Char, String>> {
+    val custom = parseIpRules(raw)
+    return if (custom.isNotEmpty()) custom else parseIpRules(DEFAULT_IP_RULES)
+}
+
 /** Vrai si l'IP respecte au moins une règle (aucune règle ⇒ faux). */
 internal fun ipMatchesRules(ip: String, rules: List<Pair<Char, String>>): Boolean =
     rules.any { (op, value) ->

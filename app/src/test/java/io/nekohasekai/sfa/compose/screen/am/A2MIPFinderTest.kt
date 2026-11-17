@@ -46,4 +46,19 @@ class A2MIPFinderTest {
         assertEquals("Silence", clickFeedbackLabel("silent"))
         assertEquals("custom", clickFeedbackLabel("custom"))
     }
+
+    @Test
+    fun defaultIpListIsEmbeddedAndUsedWhenCustomIsBlank() {
+        val default = parseIpRules(DEFAULT_IP_RULES)
+        assertEquals(57, default.size)
+        assertEquals('c' to "10.41", default.first())
+        assertEquals('c' to "10.246", default.last())
+        assertTrue(ipMatchesRules("10.204.12.34", effectiveIpRules("")))
+        assertTrue(ipMatchesRules("10.213.1.1", effectiveIpRules("  ; \n")))
+        assertFalse(ipMatchesRules("192.168.1.9", effectiveIpRules("")))
+        // Liste personnalisée : elle remplace entièrement la liste par défaut.
+        val custom = effectiveIpRules("^192.168")
+        assertTrue(ipMatchesRules("192.168.1.9", custom))
+        assertFalse(ipMatchesRules("10.204.12.34", custom))
+    }
 }

@@ -81,7 +81,7 @@ fun A2MIPFinderScreen(
     val scaffoldPadding = LocalScaffoldPadding.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
-    var rulesText by remember { mutableStateOf(Settings.ipFinderRules) }
+    var rulesText by remember { mutableStateOf(Settings.ipFinderRules.ifBlank { DEFAULT_IP_RULES }) }
     var cyclesText by remember { mutableStateOf(Settings.ipFinderCycles.toString()) }
     var pauseText by remember { mutableStateOf(Settings.ipFinderPauseSec.toString()) }
     var autoConnect by remember { mutableStateOf(Settings.ipFinderAutoConnect) }
@@ -98,7 +98,7 @@ fun A2MIPFinderScreen(
     var diagVersion by remember { mutableStateOf(0) }
     var searchJob by remember { mutableStateOf<Job?>(null) }
 
-    val rules = remember(rulesText) { parseIpRules(rulesText) }
+    val rules = remember(rulesText) { effectiveIpRules(rulesText) }
 
     // IP réelle + Wi-Fi : relus toutes les 3 s tant que l'écran est visible.
     LaunchedEffect(Unit) {
@@ -339,7 +339,9 @@ fun A2MIPFinderScreen(
                 )
                 Text(
                     text =
-                    "^ commence par · \$ se termine par · = exact · sans symbole : " +
+                    "Liste par défaut intégrée (préfixes 10.xx) : remplacez-la " +
+                        "ci-dessous par vos propres adresses, même format. " +
+                        "^ commence par · \$ se termine par · = exact · sans symbole : " +
                         "contient n'importe où dans l'adresse · séparez par ligne, " +
                         "virgule ou ;",
                     style = MaterialTheme.typography.bodySmall,
@@ -368,8 +370,8 @@ fun A2MIPFinderScreen(
                         modifier =
                         Modifier
                             .clickable {
-                                rulesText = ""
-                                Settings.ipFinderRules = ""
+                                rulesText = DEFAULT_IP_RULES
+                                Settings.ipFinderRules = DEFAULT_IP_RULES
                             }
                             .padding(vertical = 4.dp),
                     )
@@ -713,7 +715,7 @@ private suspend fun runIpSearch(
     onFallback: () -> Unit,
     onObserved: () -> Unit,
 ): String? {
-    val rules = parseIpRules(Settings.ipFinderRules)
+    val rules = effectiveIpRules(Settings.ipFinderRules)
     var lastIp: String? = null
 
     suspend fun observe(ip: String): String? {

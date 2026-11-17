@@ -31,9 +31,15 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
-    <uses-permission
-        android:name="android.permission.QUERY_ALL_PACKAGES"
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
+
+    <!-- IP Finder : bascule automatique du mode avion. Permission protégée,
+         accordée uniquement via `adb shell pm grant` (l'écran IP Finder affiche
+         la commande). Sans elle, la recherche reste en veille manuelle. -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:name=".Application"
@@ -204,7 +210,7 @@
                 <action android:name="android.service.voice.VoiceInteractionService" />
             </intent-filter>
             <meta-data
-                android:name="android.service.voice"
+                android:name="android.voice_interaction"
                 android:resource="@xml/voice_interaction_service" />
         </service>
         <service
