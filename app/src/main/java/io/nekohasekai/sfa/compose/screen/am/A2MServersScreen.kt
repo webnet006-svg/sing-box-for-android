@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -96,6 +97,8 @@ fun A2MServersScreen(
     var codes by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
     var addresses by remember { mutableStateOf<Map<Long, String?>>(emptyMap()) }
     var searchQuery by remember { mutableStateOf("") }
+    var testResults by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    var testingIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
 
     var showImportSheet by remember { mutableStateOf(false) }
     var showLinkDialog by remember { mutableStateOf(false) }
@@ -149,6 +152,30 @@ fun A2MServersScreen(
             profile.typed.autoUpdate = !profile.typed.autoUpdate
             ProfileManager.update(profile)
             UpdateProfileWork.reconfigureUpdater()
+        }
+    }
+
+    /**
+     * Test TCP réel du serveur : la socket est ouverte vers l'adresse:port
+     * réels de la configuration ; la durée d'établissement (résolution DNS
+     * incluse) est affichée. Échec honnête si la connexion ne s'établit pas.
+     */
+    fun testProfile(profile: Profile) {
+        coroutineScope.launch {
+            testingIds = testingIds + profile.id
+            val target =
+                withContext(Dispatchers.IO) { A2MProfileInfo.serverAddressAndPort(profile) }
+            val result =
+                if (target == null) {
+                    "Adresse inconnue"
+                } else {
+                    when (val ms = A2MProfileInfo.tcpPing(target.first, target.second)) {
+                        null -> "Échec"
+                        else -> "TCP $ms ms"
+                    }
+                }
+            testResults = testResults + (profile.id to result)
+            testingIds = testingIds - profile.id
         }
     }
 
@@ -297,6 +324,9 @@ fun A2MServersScreen(
                         onDelete = { pendingDelete = profile },
                         onShare = { shareProfile(profile) },
                         onEdit = { onEditProfile(profile.id) },
+                        testResult = testResults[profile.id],
+                        testing = profile.id in testingIds,
+                        onTest = { testProfile(profile) },
                     )
                 }
             }
@@ -567,6 +597,9 @@ private fun ServerRow(
     onDelete: () -> Unit,
     onShare: () -> Unit,
     onEdit: () -> Unit,
+    testResult: String?,
+    testing: Boolean,
+    onTest: () -> Unit,
 ) {
     Row(
         modifier =
@@ -643,6 +676,20 @@ private fun ServerRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (testResult != null || testing) {
+                Text(
+                    text =
+                    if (testing) "Test en cours…" else "Tester : $testResult",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color =
+                    when {
+                        testing -> A2MColors.Faint
+                        testResult?.endsWith("ms") == true -> A2MColors.Accent
+                        else -> MaterialTheme.colorScheme.error
+                    },
+                )
+            }
         }
 
         autoUpdateEnabled?.let { autoUpdate ->
@@ -654,6 +701,15 @@ private fun ServerRow(
                     color = if (autoUpdate) A2MColors.Accent else A2MColors.Muted,
                 )
             }
+        }
+
+        IconButton(onClick = onTest) {
+            Icon(
+                imageVector = Icons.Filled.NetworkCheck,
+                contentDescription = "Tester",
+                tint = if (testing) A2MColors.Accent else A2MColors.Muted,
+                modifier = Modifier.size(20.dp),
+            )
         }
 
         IconButton(onClick = onEdit) {

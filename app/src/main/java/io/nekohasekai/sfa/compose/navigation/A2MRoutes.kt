@@ -23,6 +23,7 @@ object A2MRoutes {
     const val SETTINGS_ANTI_CENSORSHIP = "a2m/settings/anti-censorship"
     const val SETTINGS_ADVANCED = "a2m/settings/advanced"
     const val SETTINGS_ABOUT = "a2m/settings/about"
+    const val IP_FINDER = "a2m/tools/ipfinder"
     const val APPEARANCE = "a2m/appearance"
 
     /** Préfixe commun, utilisé pour la barre de navigation A2M. */

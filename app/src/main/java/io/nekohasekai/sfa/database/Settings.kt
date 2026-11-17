@@ -83,6 +83,18 @@ object Settings {
     var reconnectDelaySec by dataStore.int(SettingsKey.RECONNECT_DELAY_SEC) { 5 }
     var backgroundBehavior by dataStore.string(SettingsKey.BACKGROUND_BEHAVIOR) { "always" }
 
+    // ── IP Finder : ciblage de l'IP du réseau mobile ──
+    // Règles « ^préfixe », « $suffixe », « =exacte » séparées par ;; / , / retour
+    // à la ligne ; historique « timestamp|ip » (une ligne par observation).
+    var ipFinderRules by dataStore.string(SettingsKey.IP_FINDER_RULES) { "" }
+    var ipFinderAutoConnect by dataStore.boolean(SettingsKey.IP_FINDER_AUTO_CONNECT) { true }
+    var ipFinderHistory by dataStore.string(SettingsKey.IP_FINDER_HISTORY) { "" }
+    var ipFinderCycles by dataStore.int(SettingsKey.IP_FINDER_CYCLES) { 100 }
+    var ipFinderPauseSec by dataStore.int(SettingsKey.IP_FINDER_PAUSE_SEC) { 3 }
+
+    // ── Retour tactile dans les réglages : sound / vibrate / silent ──
+    var clickFeedback by dataStore.string(SettingsKey.CLICK_FEEDBACK) { "silent" }
+
     const val PER_APP_PROXY_DISABLED = 0
     const val PER_APP_PROXY_EXCLUDE = 1
     const val PER_APP_PROXY_INCLUDE = 2

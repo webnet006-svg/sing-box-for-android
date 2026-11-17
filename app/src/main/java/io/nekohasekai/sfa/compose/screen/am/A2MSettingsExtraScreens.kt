@@ -268,6 +268,7 @@ fun A2MAppearanceScreen(
     val scaffoldPadding = LocalScaffoldPadding.current
     val settings = A2MThemeState.settings
     val lightPalettes = A2MThemeCatalog.palettes.filter { !it.isDark }
+    var clickFeedback by remember { mutableStateOf(Settings.clickFeedback) }
 
     Column(
         modifier =
@@ -295,6 +296,35 @@ fun A2MAppearanceScreen(
                     A2MThemeModeSelector(
                         selected = settings.mode,
                         onSelect = { A2MThemeState.setMode(it) },
+                    )
+                }
+            }
+
+            A2MSettingsGroup(title = "Retour tactile", icon = Icons.Filled.Palette) {
+                var showFeedbackDialog by remember { mutableStateOf(false) }
+                A2MSettingRow(
+                    icon = Icons.Filled.Info,
+                    title = "Retour tactile",
+                    subtitle = "Sur chaque clic dans les réglages",
+                    value = clickFeedbackLabel(clickFeedback),
+                    onClick = { showFeedbackDialog = true },
+                )
+                if (showFeedbackDialog) {
+                    A2MChoiceDialog(
+                        title = "Retour tactile",
+                        options =
+                        listOf(
+                            A2MChoiceOption(A2MClickFeedback.SOUND, "Son"),
+                            A2MChoiceOption(A2MClickFeedback.VIBRATE, "Vibreur"),
+                            A2MChoiceOption(A2MClickFeedback.SILENT, "Silence"),
+                        ),
+                        selected = clickFeedback,
+                        onDismiss = { showFeedbackDialog = false },
+                        onSelect = {
+                            clickFeedback = it
+                            Settings.clickFeedback = it
+                            showFeedbackDialog = false
+                        },
                     )
                 }
             }

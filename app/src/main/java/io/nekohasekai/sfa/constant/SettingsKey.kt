@@ -41,6 +41,16 @@ object SettingsKey {
     const val RECONNECT_DELAY_SEC = "reconnect_delay_sec"
     const val BACKGROUND_BEHAVIOR = "background_behavior"
 
+    // IP Finder : ciblage de l'IP du réseau mobile (règles ^/$/=, historique, auto-connect).
+    const val IP_FINDER_RULES = "ip_finder_rules"
+    const val IP_FINDER_AUTO_CONNECT = "ip_finder_auto_connect"
+    const val IP_FINDER_HISTORY = "ip_finder_history"
+    const val IP_FINDER_CYCLES = "ip_finder_cycles"
+    const val IP_FINDER_PAUSE_SEC = "ip_finder_pause_sec"
+
+    // Retour tactile (clics dans les réglages) : sound / vibrate / silent.
+    const val CLICK_FEEDBACK = "click_feedback"
+
     const val PRIVILEGE_SETTINGS_ENABLED = "hide_settings_enabled"
     const val PRIVILEGE_SETTINGS_LIST = "hide_settings_list"
     const val PRIVILEGE_SETTINGS_INTERFACE_RENAME_ENABLED = "hide_settings_interface_rename_enabled"

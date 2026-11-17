@@ -2,10 +2,13 @@ package io.nekohasekai.sfa.compose.screen.am
 
 import io.nekohasekai.sfa.database.Profile
 import io.nekohasekai.sfa.database.TypedProfile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -111,6 +114,43 @@ internal object A2MProfileInfo {
                     ?.get("server")?.jsonPrimitive?.contentOrNull
             server?.takeIf { it.isNotBlank() }
         }.getOrNull()
+
+    /**
+     * Adresse + port du premier serveur sortant réel, pour le test TCP réel
+     * (« Tester » de l'écran Serveurs), ou null si absent de la configuration.
+     */
+    fun serverAddressAndPort(profile: Profile): Pair<String, Int>? =
+        runCatching {
+            val text = File(profile.typed.path).readText()
+            val root = json.parseToJsonElement(text).jsonObject
+            val outbounds = root["outbounds"]?.jsonArray ?: return@runCatching null
+            val proxy =
+                outbounds
+                    .mapNotNull { it as? JsonObject }
+                    .firstOrNull { outbound ->
+                        val type = outbound["type"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                        type.isNotBlank() && type !in NON_PROXY_TYPES
+                    }
+            val server = proxy?.get("server")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+                ?: return@runCatching null
+            val port = proxy["server_port"]?.jsonPrimitive?.intOrNull ?: 443
+            server to port
+        }.getOrNull()
+
+    /**
+     * Test TCP réel : ouvre une socket vers host:port et mesure la durée de
+     * l'établissement (résolution DNS incluse). Retourne null en échec.
+     */
+    suspend fun tcpPing(host: String, port: Int, timeoutMs: Int = 3000): Int? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val start = System.nanoTime()
+                java.net.Socket().use { socket ->
+                    socket.connect(java.net.InetSocketAddress(host, port), timeoutMs)
+                }
+                ((System.nanoTime() - start) / 1_000_000L).toInt()
+            }.getOrNull()
+        }
 
     /** Serveurs DNS réellement déclarés dans la configuration (lecture seule). */
     fun dnsServers(profile: Profile): List<String> =

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -120,6 +121,7 @@ fun A2MSettingsScreen(
             Entry("Routage", "Applications et réseaux", Icons.Filled.Route, A2MRoutes.ROUTING, listOf("routage", "applications", "réseaux", "per", "app")),
             Entry("Moteur réseau", "MTU, mux, pile TUN", Icons.Filled.Memory, A2MRoutes.SETTINGS_ENGINE, listOf("moteur", "mtu", "mux", "pile", "tun", "gvisor")),
             Entry("Partage hotspot", "Proxy pour le partage", Icons.Filled.WifiTethering, A2MRoutes.SETTINGS_HOTSPOT, listOf("hotspot", "partage", "proxy", "socks")),
+            Entry("IP Finder", "Trouver une IP du réseau mobile", Icons.Filled.NetworkCheck, A2MRoutes.IP_FINDER, listOf("ip", "finder", "mode", "avion", "recherche", "réseau")),
             Entry("Apparence", "Thèmes et mode d'affichage", Icons.Filled.Palette, A2MRoutes.APPEARANCE, listOf("apparence", "thème", "theme", "couleur", "palette", "sombre", "clair")),
             Entry("Automatisation", "Deep links, connexion", Icons.Filled.Link, A2MRoutes.SETTINGS_AUTOMATION, listOf("automatisation", "liens", "deep", "a2mtun")),
             Entry("Diagnostics", "Pourquoi la connexion échoue", Icons.Filled.BugReport, A2MRoutes.SETTINGS_DIAGNOSTICS, listOf("diagnostic", "panne", "échec", "echec", "vérifications")),
@@ -398,6 +400,14 @@ fun A2MSettingsScreen(
                     },
                     iconTint = Color(0xFF3D6EF7),
                     onClick = { onNavigate(A2MRoutes.SETTINGS_HOTSPOT) },
+                )
+                A2MDividerLine(inset = 14.dp)
+                A2MSettingRow(
+                    icon = Icons.Filled.NetworkCheck,
+                    title = "IP Finder",
+                    subtitle = "Trouver une IP précise du réseau mobile",
+                    iconTint = Color(0xFF3D6EF7),
+                    onClick = { onNavigate(A2MRoutes.IP_FINDER) },
                 )
             }
         }

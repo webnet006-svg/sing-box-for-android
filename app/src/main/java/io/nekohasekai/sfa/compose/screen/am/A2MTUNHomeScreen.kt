@@ -110,7 +110,7 @@ fun A2MTUNHomeScreen(
     var cellularIp by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         while (true) {
-            cellularIp = withContext(Dispatchers.IO) { readCellularIp() }
+            cellularIp = withContext(Dispatchers.IO) { A2MNetworkInfo.readCellularIp() }
             delay(3000)
         }
     }
@@ -765,31 +765,3 @@ private fun A2MConfigNameCard(
         )
     }
 }
-
-/**
- * IP IPv4 réelle du réseau mobile : énumère les interfaces réseau de l'appareil.
- * Priorité aux interfaces cellulaires nommées (rmnet, ccmni, ccemni, wwan…),
- * sinon première interface non exclue (wlan/tun/usb ignorés). Aucune requête
- * réseau : la donnée vient du système. Retourne null quand aucune interface
- * n'a d'adresse (affichage « — »).
- */
-private fun readCellularIp(): String? =
-    runCatching {
-        val interfaces =
-            java.net.NetworkInterface.getNetworkInterfaces().asSequence()
-                .filter { it.isUp && !it.isLoopback }
-                .toList()
-        val v4: (java.net.NetworkInterface) -> String? = { iface ->
-            iface.inetAddresses.asSequence()
-                .filter { it is java.net.Inet4Address && !it.isLoopbackAddress && !it.isAnyLocalAddress }
-                .firstOrNull()?.hostAddress
-        }
-        val cellular = listOf("rmnet", "ccmni", "ccemni", "wwan")
-        val excluded = listOf("wlan", "swlan", "tun", "tap", "lo", "dummy", "usb")
-        interfaces
-            .filter { iface -> cellular.any { iface.name.lowercase().contains(it) } }
-            .firstNotNullOfOrNull(v4)
-            ?: interfaces
-                .filter { iface -> excluded.none { iface.name.lowercase().contains(it) } }
-                .firstNotNullOfOrNull(v4)
-    }.getOrNull()

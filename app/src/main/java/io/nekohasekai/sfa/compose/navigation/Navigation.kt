@@ -26,6 +26,7 @@ import io.nekohasekai.sfa.compose.screen.am.A2MSettingsDnsScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsEngineScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsHotspotScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MIPFinderScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MTUNHomeScreen
 import io.nekohasekai.sfa.compose.screen.configuration.NewProfileScreen
 import io.nekohasekai.sfa.compose.screen.connections.ConnectionDetailsRoute
@@ -198,6 +199,15 @@ fun NavHost(
         composable(A2MRoutes.SETTINGS_CONNECTION) {
             A2MSettingsConnectionScreen(
                 serviceStatus = serviceStatus,
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.IP_FINDER) {
+            A2MIPFinderScreen(
+                serviceStatus = serviceStatus,
+                dashboardViewModel = dashboardViewModel ?: viewModel(),
                 onBack = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
             )

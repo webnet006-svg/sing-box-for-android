@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- IP Finder : déclaration assistant A2M TUN. Le rôle est demandé uniquement
+     pour basculer le mode avion ; aucune dictée, aucun audio, aucun écran lu. -->
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="io.nekohasekai.sfa.bg.A2MVoiceInteractionSessionService" />

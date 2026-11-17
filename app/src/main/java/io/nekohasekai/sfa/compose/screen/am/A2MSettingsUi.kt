@@ -32,9 +32,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.nekohasekai.sfa.database.Settings
 
 /**
  * Composants de réglages façon ONFAA, adaptés au design system A2M.
@@ -103,13 +105,17 @@ fun A2MSettingRow(
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
+    val context = LocalContext.current
     Row(
         modifier =
         Modifier
             .fillMaxWidth()
             .then(
                 if (onClick != null) {
-                    Modifier.clickable(onClick = onClick)
+                    Modifier.clickable {
+                        A2MClickFeedback.apply(context, Settings.clickFeedback)
+                        onClick()
+                    }
                 } else {
                     Modifier
                 },
@@ -186,11 +192,13 @@ fun A2MSettingSwitchRow(
     subtitle: String? = null,
     iconTint: Color = A2MColors.Accent,
 ) {
+    val context = LocalContext.current
     Row(
         modifier =
         Modifier
             .fillMaxWidth()
             .clickable {
+                A2MClickFeedback.apply(context, Settings.clickFeedback)
                 onCheckedChange(!checked)
             }
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -236,7 +244,10 @@ fun A2MSettingSwitchRow(
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            onCheckedChange = {
+                A2MClickFeedback.apply(context, Settings.clickFeedback)
+                onCheckedChange(it)
+            },
             colors =
             SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
@@ -373,6 +384,7 @@ fun A2MChoiceDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                val context = LocalContext.current
                 options.forEach { option ->
                     Row(
                         modifier =
@@ -380,6 +392,7 @@ fun A2MChoiceDialog(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
                             .clickable {
+                                A2MClickFeedback.apply(context, Settings.clickFeedback)
                                 onSelect(option.value)
                             }
                             .padding(horizontal = 4.dp, vertical = 8.dp),
