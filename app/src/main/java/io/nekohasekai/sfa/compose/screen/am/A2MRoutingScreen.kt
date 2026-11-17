@@ -25,6 +25,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -82,6 +83,7 @@ fun A2MRoutingScreen(
     val useRoot = queryMode == Settings.PACKAGE_QUERY_MODE_ROOT
     val shizukuReady by PackageQueryManager.shizukuBinderReady.collectAsState()
     val shizukuGranted by PackageQueryManager.shizukuPermissionGranted.collectAsState()
+    val shizukuInstalled by PackageQueryManager.shizukuInstalled.collectAsState()
     val rootAvailable by PackageQueryManager.rootAvailable.collectAsState()
     val privilegeAvailable =
         if (useRoot) {
@@ -89,6 +91,26 @@ fun A2MRoutingScreen(
         } else {
             PackageQueryManager.showModeSelector && shizukuReady && shizukuGranted
         }
+
+    // Suivi live de l'état Shizuku (même mécanisme que ProfileOverrideScreen).
+    DisposableEffect(queryMode, useRoot) {
+        if (PackageQueryManager.showModeSelector) {
+            PackageQueryManager.registerListeners()
+            PackageQueryManager.refreshShizukuState()
+        }
+        onDispose {
+            if (PackageQueryManager.showModeSelector) {
+                PackageQueryManager.unregisterListeners()
+            }
+        }
+    }
+
+    // Vérifie la disponibilité root dès l'entrée sur la page (met à jour le flux).
+    LaunchedEffect(useRoot) {
+        if (useRoot) {
+            PackageQueryManager.checkRootAvailable()
+        }
+    }
 
     var perAppEnabled by remember { mutableStateOf(Settings.perAppProxyEnabled) }
     var perAppMode by remember { mutableStateOf(Settings.perAppProxyMode) }
@@ -294,14 +316,38 @@ fun A2MRoutingScreen(
             onDismissRequest = { showPrivilegeDialog = false },
             title = { Text("Autorisation requise", color = A2MColors.Text) },
             text = {
-                Text(
-                    "Le routage par application nécessite Shizuku ou l'accès root. Configurez l'un des deux dans les paramètres de l'application, puis réessayez.",
-                    color = A2MColors.Muted,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Le routage par application nécessite Shizuku ou l'accès root.",
+                        color = A2MColors.Muted,
+                    )
+                    if (!useRoot && shizukuInstalled) {
+                        Text(
+                            if (shizukuReady) {
+                                "Shizuku est prêt — demandez l'autorisation puis réessayez."
+                            } else {
+                                "Shizuku est installé mais non connecté. Ouvrez Shizuku puis réessayez."
+                            },
+                            color = A2MColors.Muted,
+                        )
+                    }
+                }
             },
             confirmButton = {
-                TextButton(onClick = { showPrivilegeDialog = false }) {
-                    Text("Compris", color = A2MColors.Cyan, fontWeight = FontWeight.Bold)
+                if (!useRoot && shizukuInstalled) {
+                    TextButton(
+                        onClick = {
+                            PackageQueryManager.requestShizukuPermission()
+                            PackageQueryManager.refreshShizukuState()
+                            showPrivilegeDialog = false
+                        },
+                    ) {
+                        Text("Demander l'autorisation Shizuku", color = A2MColors.Cyan, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    TextButton(onClick = { showPrivilegeDialog = false }) {
+                        Text("Compris", color = A2MColors.Cyan, fontWeight = FontWeight.Bold)
+                    }
                 }
             },
         )
