@@ -177,6 +177,8 @@ object A2MConfigDecorations {
                     add(bootstrap)
                 })
                 put("final", "remote")
+                // Tunnel IPv4 : privilégier les réponses A pour éviter les lenteurs AAAA.
+                put("strategy", "prefer_ipv4")
             }
             route["default_domain_resolver"] = buildJsonObject {
                 put("server", "bootstrap")

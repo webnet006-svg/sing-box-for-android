@@ -109,6 +109,7 @@ class A2MConfigDecorationsTest {
         assertEquals("9.9.9.9", bootstrap["server"]!!.jsonPrimitive.content)
         assertEquals("direct", bootstrap["detour"]!!.jsonPrimitive.content)
         assertEquals("remote", dns["final"]!!.jsonPrimitive.content)
+        assertEquals("prefer_ipv4", dns["strategy"]!!.jsonPrimitive.content)
         assertEquals(
             "bootstrap",
             root["route"]!!.jsonObject["default_domain_resolver"]!!.jsonObject["server"]!!.jsonPrimitive.content,
