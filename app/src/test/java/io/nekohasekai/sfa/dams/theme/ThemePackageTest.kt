@@ -43,8 +43,8 @@ class ThemePackageTest {
 
     @Test
     fun rejectsMissingOrInvalidColors() {
-        val valid = ThemePackage.encode(sample())
-        val missing = valid.replace("\"amber\": \"#FFFFB020\",", "")
+        val valid = ThemePackage.encodeCompact(sample())
+        val missing = valid.replace(",\"amber\":\"#FFFFB020\"", "")
         assertNull(ThemePackage.decode(missing))
         val invalidHex = valid.replaceFirst("#FF16E0C4", "#ZZZZZZ")
         assertNull(ThemePackage.decode(invalidHex))
