@@ -292,7 +292,7 @@ fun A2MAppearanceScreen(
     val customRevision = A2MThemeState.customRevision
     val editorBase =
         remember(customRevision) {
-            A2MThemeCatalog.storedCustom() ?: A2MThemeCatalog.packageOf(A2MThemeState.currentPackage())
+            A2MThemeCatalog.storedCustom() ?: A2MThemeState.currentPackage()
         }
     var customDark by remember(customRevision) { mutableStateOf(editorBase.dark) }
     var accentHex by remember(customRevision) { mutableStateOf(editorBase.color("accent")) }
