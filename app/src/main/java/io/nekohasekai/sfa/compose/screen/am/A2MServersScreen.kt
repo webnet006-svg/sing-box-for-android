@@ -104,6 +104,7 @@ fun A2MServersScreen(
 
     var showImportSheet by remember { mutableStateOf(false) }
     var showLinkDialog by remember { mutableStateOf(false) }
+    var exportTarget by remember { mutableStateOf<Pair<Profile, String>?>(null) }
     var linkText by remember { mutableStateOf("") }
     var importMessage by remember { mutableStateOf<String?>(null) }
     var subscriptionUrl by remember { mutableStateOf<String?>(null) }
@@ -178,6 +179,21 @@ fun A2MServersScreen(
                 }
             testResults = testResults + (profile.id to result)
             testingIds = testingIds - profile.id
+        }
+    }
+
+    /** Ouvre la feuille d'export (liens partageables, QR) d'un profil local. */
+    fun openExport(profile: Profile) {
+        coroutineScope.launch {
+            val text =
+                withContext(Dispatchers.IO) {
+                    runCatching { java.io.File(profile.typed.path).readText() }.getOrNull()
+                }
+            if (text.isNullOrBlank()) {
+                importMessage = "Rien à exporter : configuration vide"
+            } else {
+                exportTarget = profile to text
+            }
         }
     }
 
@@ -324,7 +340,13 @@ fun A2MServersScreen(
                             }
                         },
                         onDelete = { pendingDelete = profile },
-                        onShare = { shareProfile(profile) },
+                        onShare = {
+                            if (profile.typed.type == TypedProfile.Type.Local) {
+                                openExport(profile)
+                            } else {
+                                shareProfile(profile)
+                            }
+                        },
                         onEdit = { onEditProfile(profile.id) },
                         testResult = testResults[profile.id],
                         testing = profile.id in testingIds,
@@ -508,6 +530,14 @@ fun A2MServersScreen(
                     Text("OK", color = A2MColors.Accent, fontWeight = FontWeight.Bold)
                 }
             },
+        )
+    }
+
+    exportTarget?.let { (profile, config) ->
+        A2MExportSheet(
+            profileName = profile.name,
+            config = config,
+            onDismiss = { exportTarget = null },
         )
     }
 

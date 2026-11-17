@@ -168,7 +168,7 @@ object ShareExport {
                 if (draft.alpn.isNotBlank()) put("alpn", draft.alpn)
                 if (draft.fingerprint.isNotBlank()) put("fp", draft.fingerprint)
             }.toString()
-        return "vmess://" + Base64.Standard.encode(payload.toByteArray(Charsets.UTF_8))
+        return "vmess://" + Base64.Default.encode(payload.toByteArray(Charsets.UTF_8))
     }
 
     private fun query(params: List<Pair<String, String>>): String =

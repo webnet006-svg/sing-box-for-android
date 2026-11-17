@@ -383,6 +383,43 @@ class MainActivity :
                 }
             }
             "open" -> Unit // l'app est déjà portée au premier plan par l'ouverture du lien
+            "server", "config" -> {
+                val segment = uri.pathSegments?.firstOrNull()
+                if (segment.isNullOrBlank()) {
+                    pendingIntentErrorMessage = "Lien de configuration manquant"
+                    return
+                }
+                val text =
+                    if (uri.host == "config") {
+                        io.nekohasekai.sfa.dams.importer.ShareExport.decodeCoded("a2mtun://config/$segment")
+                    } else {
+                        segment
+                    }
+                if (text.isNullOrBlank()) {
+                    pendingIntentErrorMessage = "Lien A2M TUN invalide ou incomplet"
+                    return
+                }
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val importer = io.nekohasekai.sfa.dams.importer.ClipboardImporter(this@MainActivity)
+                    when (val outcome = importer.importText(text)) {
+                        is io.nekohasekai.sfa.dams.importer.ClipboardImporter.Outcome.Success -> {
+                            withContext(Dispatchers.Main) {
+                                pendingNavigationRoute.value = "a2m/servers"
+                                android.widget.Toast.makeText(
+                                    this@MainActivity,
+                                    "Serveur importé",
+                                    android.widget.Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        }
+                        is io.nekohasekai.sfa.dams.importer.ClipboardImporter.Outcome.Error -> {
+                            withContext(Dispatchers.Main) {
+                                pendingIntentErrorMessage = outcome.message
+                            }
+                        }
+                    }
+                }
+            }
             "add" -> {
                 val link = uri.pathSegments?.firstOrNull()
                 if (link.isNullOrBlank()) {

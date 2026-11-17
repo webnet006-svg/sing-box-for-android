@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
@@ -664,7 +665,7 @@ fun A2MSettingsAutomationScreen(
                 AutomationActionRow(
                     icon = Icons.Filled.Add,
                     title = "Ajouter une configuration",
-                    link = "a2mtun://add/<lien-de-configuration>",
+                    link = "a2mtun://server/<lien-de-partage>",
                     clipboard = clipboard,
                     context = context,
                 )
@@ -673,6 +674,14 @@ fun A2MSettingsAutomationScreen(
                     icon = Icons.Filled.RssFeed,
                     title = "Ajouter un abonnement",
                     link = "a2mtun://add/<url-abonnement-https>",
+                    clipboard = clipboard,
+                    context = context,
+                )
+                HorizontalDivider(color = A2MColors.CardBorder)
+                AutomationActionRow(
+                    icon = Icons.Filled.QrCode2,
+                    title = "Importer une configuration complète",
+                    link = "a2mtun://config/<lien-codé>",
                     clipboard = clipboard,
                     context = context,
                 )
