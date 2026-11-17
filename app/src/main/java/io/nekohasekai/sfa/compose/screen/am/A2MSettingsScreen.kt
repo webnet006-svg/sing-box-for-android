@@ -235,8 +235,10 @@ fun A2MSettingsScreen(
                         icon = Icons.Filled.Shield,
                         tileColor = Color(0xFF3D6EF7),
                         title = "Connexion",
-                        subtitle = "Notification dynamique : " +
-                            if (io.nekohasekai.sfa.database.Settings.dynamicNotification) "Activée" else "Désactivée",
+                        subtitle = "Notification : " +
+                            (if (io.nekohasekai.sfa.database.Settings.dynamicNotification) "on" else "off") +
+                            " · Pub : " +
+                            (if (io.nekohasekai.sfa.database.Settings.adBlockEnabled) "on" else "off"),
                         onClick = { onNavigate(A2MRoutes.SETTINGS_CONNECTION) },
                     )
                     if (matches("journal", "log")) {

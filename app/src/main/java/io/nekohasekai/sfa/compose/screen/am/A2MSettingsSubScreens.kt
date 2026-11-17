@@ -113,6 +113,7 @@ fun A2MSettingsConnectionScreen(
 
     var dynamicNotification by remember { mutableStateOf(Settings.dynamicNotification) }
     var allowBypass by remember { mutableStateOf(Settings.allowBypass) }
+    var adBlockEnabled by remember { mutableStateOf(Settings.adBlockEnabled) }
 
     LazyColumn(
         modifier =
@@ -142,6 +143,24 @@ fun A2MSettingsConnectionScreen(
                     onCheckedChange = {
                         dynamicNotification = it
                         Settings.dynamicNotification = it
+                    },
+                )
+            }
+        }
+
+        item { SubSectionLabel("Protection") }
+
+        item {
+            SubScreenCard {
+                SettingSwitch(
+                    title = "Bloqueur de publicités",
+                    subtitle = "Bloque les domaines publicitaires connus (geosite ads-all) au niveau du routage. " +
+                        "Nécessite un redémarrage du tunnel.",
+                    checked = adBlockEnabled,
+                    onCheckedChange = {
+                        adBlockEnabled = it
+                        Settings.adBlockEnabled = it
+                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
                     },
                 )
             }

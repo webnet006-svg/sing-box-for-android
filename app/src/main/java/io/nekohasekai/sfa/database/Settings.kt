@@ -98,6 +98,9 @@ object Settings {
     }
 
     var allowBypass by dataStore.boolean(SettingsKey.ALLOW_BYPASS) { false }
+
+    /** Bloqueur de publicités : injecte des règles de routage « block » au démarrage du tunnel. */
+    var adBlockEnabled by dataStore.boolean(SettingsKey.AD_BLOCK_ENABLED) { false }
     var systemProxyEnabled by dataStore.boolean(SettingsKey.SYSTEM_PROXY_ENABLED) { true }
 
     var privilegeSettingsEnabled by dataStore.boolean(SettingsKey.PRIVILEGE_SETTINGS_ENABLED) { false }

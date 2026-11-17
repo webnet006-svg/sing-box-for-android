@@ -143,6 +143,9 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                 return
             }
 
+            // Décoration A2M (bloqueur de pubs) appliquée à la config réelle.
+            val effectiveContent = effectiveContent(content)
+
             lastProfileName = profile.name
             withContext(Dispatchers.Main) {
                 notification.show(lastProfileName, R.string.status_starting)
@@ -152,7 +155,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
 
             // Validation préalable de la configuration (échec propre avant tout démarrage).
             try {
-                Libbox.checkConfig(content)
+                Libbox.checkConfig(effectiveContent)
             } catch (e: Exception) {
                 stopAndAlert(Alert.CreateService, e.message)
                 return
@@ -174,11 +177,11 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                 }
 
             try {
-                commandServer.startOrReloadService(content, serviceOverride)
+                commandServer.startOrReloadService(effectiveContent, serviceOverride)
             } catch (e: Exception) {
                 // Filet de sécurité : noyau compilé sans gVisor + profil demandant gVisor/mixed
                 // => réécriture de la pile TUN en "system" et nouvelle tentative unique.
-                val fallbackContent = buildStackFallbackContent(content, e.message)
+                val fallbackContent = buildStackFallbackContent(effectiveContent, e.message)
                 if (fallbackContent == null) {
                     stopAndAlert(Alert.CreateService, e.message)
                     return
@@ -227,6 +230,14 @@ class BoxService(private val service: Service, private val platformInterface: Pl
      * demande la pile gVisor/mixed pour l'inbound TUN, renvoie une copie de la
      * configuration avec `"stack": "system"`, sinon null.
      */
+    /** Contenu effectivement chargé : config du profil + décorations A2M (bloqueur de pubs). */
+    private fun effectiveContent(raw: String): String =
+        if (Settings.adBlockEnabled) {
+            A2MConfigDecorations.withAdBlock(raw)
+        } else {
+            raw
+        }
+
     private fun buildStackFallbackContent(content: String, cause: String?): String? {
         if (cause == null || !cause.contains("not included in this build", ignoreCase = true)) {
             return null
@@ -284,10 +295,12 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             stopAndAlert(Alert.EmptyConfiguration)
             return
         }
+        // Décoration A2M (bloqueur de pubs) appliquée aussi au rechargement.
+        val effectiveContent = effectiveContent(content)
         lastProfileName = profile.name
         try {
             commandServer.startOrReloadService(
-                content,
+                effectiveContent,
                 OverrideOptions().apply {
                     autoRedirect = Settings.autoRedirect
                     if (Vendor.isPerAppProxyAvailable() && Settings.perAppProxyEnabled) {

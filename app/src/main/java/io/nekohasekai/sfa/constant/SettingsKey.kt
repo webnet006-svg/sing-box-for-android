@@ -25,6 +25,7 @@ object SettingsKey {
     const val PER_APP_PROXY_PACKAGE_QUERY_MODE = "per_app_proxy_package_query_mode"
 
     const val ALLOW_BYPASS = "allow_bypass"
+    const val AD_BLOCK_ENABLED = "ad_block_enabled"
     const val SYSTEM_PROXY_ENABLED = "system_proxy_enabled"
 
     const val PRIVILEGE_SETTINGS_ENABLED = "hide_settings_enabled"
