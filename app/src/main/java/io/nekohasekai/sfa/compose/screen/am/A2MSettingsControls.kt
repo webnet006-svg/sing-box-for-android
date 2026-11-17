@@ -3,6 +3,7 @@ package io.nekohasekai.sfa.compose.screen.am
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,10 +21,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.KeyboardOptions
 import androidx.compose.ui.unit.dp
 
 /**
@@ -41,11 +42,12 @@ internal fun A2MRadioCard(
 ) {
     val border = if (selected) 1.5.dp else 1.dp
     val borderColor = if (selected) A2MColors.Accent else A2MColors.CardBorder
+    val selectedBrush = Brush.linearGradient(listOf(A2MColors.Accent.copy(alpha = 0.10f), A2MColors.Accent.copy(alpha = 0.10f)))
     Column(
         modifier =
         modifier
             .clip(A2MShapes.card)
-            .background(if (selected) A2MColors.Accent.copy(alpha = 0.10f) else A2MColors.CardBrush)
+            .background(brush = if (selected) selectedBrush else A2MColors.CardBrush)
             .border(border, borderColor, A2MShapes.card)
             .clickable(onClick = onClick)
             .padding(14.dp),
