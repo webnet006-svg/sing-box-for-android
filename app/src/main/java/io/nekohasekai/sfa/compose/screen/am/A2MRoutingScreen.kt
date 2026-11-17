@@ -126,7 +126,10 @@ fun A2MRoutingScreen(
                     .map { info ->
                         info.packageName to
                             runCatching {
-                                context.packageManager.getApplicationLabel(info.applicationInfo).toString()
+                                info.applicationInfo
+                                    ?.let { appInfo ->
+                                        context.packageManager.getApplicationLabel(appInfo).toString()
+                                    } ?: info.packageName
                             }.getOrDefault(info.packageName)
                     }
                     .sortedBy { it.second.lowercase() }
