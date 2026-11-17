@@ -132,7 +132,7 @@ class A2MConfigDecorationsTest {
     }
 
     @Test
-    fun dnsOverrideWithoutRouteFinalOmitsRemoteDetour() {
+    fun dnsOverrideWithoutRouteFinalUsesFirstProxyOutboundAsDetour() {
         val config = """{"outbounds":[{"type":"vmess","tag":"proxy"}]}"""
         val root = parse(
             A2MConfigDecorations.withDnsOverride(
@@ -141,8 +141,8 @@ class A2MConfigDecorationsTest {
             ),
         )
         val remote = root["dns"]!!.jsonObject["servers"]!!.jsonArray[0].jsonObject
-        // Sans route.final explicite, le détour par défaut du moteur s'applique.
-        assertFalse(remote.containsKey("detour"))
+        // Sans route.final explicite, la résolution passe par le premier sortant proxy du profil.
+        assertEquals("proxy", remote["detour"]!!.jsonPrimitive.content)
     }
 
     // ── Réglages moteur ──────────────────────────────────────────────────────
