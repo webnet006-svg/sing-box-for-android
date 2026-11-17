@@ -48,7 +48,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,39 +66,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import io.nekohasekai.sfa.bg.BoxService
 import io.nekohasekai.sfa.compose.base.GlobalEventBus
 import io.nekohasekai.sfa.compose.base.UiEvent
 import io.nekohasekai.sfa.compose.navigation.A2MRoutes
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardUiState
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardViewModel
-import io.nekohasekai.sfa.compose.screen.dashboard.groups.GroupsViewModel
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
 import io.nekohasekai.sfa.constant.Status
-import io.nekohasekai.sfa.utils.HTTPClient
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
-
-private const val A2M_IP_API_URL = "https://api.ipify.org?format=json"
 
 private val A2M_ORB_BRUSH = Brush.radialGradient(listOf(Color(0xFF116D7C), Color(0xFF0A4B5A)))
 private val A2M_ORB_GLOW = Brush.radialGradient(listOf(Color(0x3D0FA98F), Color(0x000FA98F)))
 
 /** État « froid » de l'orbe : halo menthe, comme la référence. */
 private val A2M_IDLE_RING = Color(0xFF7ED8CC)
-
-private suspend fun fetchExitIp(): String? =
-    withContext(Dispatchers.IO) {
-        runCatching {
-            HTTPClient().use { client ->
-                JSONObject(client.getString(A2M_IP_API_URL)).optString("ip")
-            }
-        }.getOrNull()
-    }
 
 /** 4250 -> "1:10:50" ; 95 -> "1:35" */
 private fun formatSession(seconds: Long): String {
@@ -117,26 +98,8 @@ fun A2MTUNHomeScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by dashboardViewModel.uiState.collectAsState()
-    // Factory obligatoire : GroupsViewModel n'a pas de constructeur vide.
-    val groupsViewModel: GroupsViewModel =
-        viewModel(
-            factory =
-            object : androidx.lifecycle.ViewModelProvider.Factory {
-                override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-                    @Suppress("UNCHECKED_CAST")
-                    return GroupsViewModel(dashboardViewModel.commandClient) as T
-                }
-            },
-        )
-    val groupsState by groupsViewModel.uiState.collectAsState()
     val scaffoldPadding = LocalScaffoldPadding.current
-    val coroutineScope = rememberCoroutineScope()
 
-    var exitIp by remember { mutableStateOf<String?>(null) }
-    var isRefreshingIp by remember { mutableStateOf(false) }
-    var selectedProtocol by remember { mutableStateOf<String?>(null) }
-    var selectedCode by remember { mutableStateOf("") }
-    var selectedAddress by remember { mutableStateOf<String?>(null) }
     var toastMessage by remember { mutableStateOf<String?>(null) }
     var connectionError by remember { mutableStateOf(false) }
 
@@ -148,15 +111,10 @@ fun A2MTUNHomeScreen(
         when (serviceStatus) {
             Status.Started -> {
                 connectedAt = System.currentTimeMillis()
-                isRefreshingIp = true
-                exitIp = fetchExitIp()
-                isRefreshingIp = false
             }
             Status.Stopped -> {
-                // L'IP affichée n'est plus celle de sortie : on ne garde rien de périmé.
                 connectedAt = 0L
                 sessionSeconds = 0L
-                exitIp = null
             }
             else -> Unit
         }
@@ -166,20 +124,6 @@ fun A2MTUNHomeScreen(
         while (connectedAt > 0) {
             sessionSeconds = (System.currentTimeMillis() - connectedAt) / 1000
             delay(1000)
-        }
-    }
-
-    LaunchedEffect(uiState.selectedProfileId, uiState.profiles) {
-        val profile = uiState.profiles.firstOrNull { it.id == uiState.selectedProfileId }
-        selectedProtocol = null
-        selectedCode = ""
-        selectedAddress = null
-        profile?.let { selected ->
-            withContext(Dispatchers.IO) {
-                selectedProtocol = A2MProfileInfo.protocolLabel(selected)
-                selectedCode = A2MProfileInfo.protocolCode(selected)
-                selectedAddress = A2MProfileInfo.serverAddress(selected)
-            }
         }
     }
 
@@ -203,10 +147,6 @@ fun A2MTUNHomeScreen(
     val isConnected = serviceStatus == Status.Started
     val isBusy = serviceStatus == Status.Starting || serviceStatus == Status.Stopping
     val hasFailed = connectionError && serviceStatus == Status.Stopped
-
-    // Latence réelle de sortie : élément sélectionné du premier groupe sélectionnable de la config active.
-    val testableGroup = groupsState.groups.firstOrNull { it.selectable && it.items.isNotEmpty() }
-    val exitDelay = testableGroup?.items?.firstOrNull { it.tag == testableGroup.selected }?.urlTestDelay ?: 0
 
     Box(
         modifier =
@@ -310,30 +250,11 @@ fun A2MTUNHomeScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // ── Configuration actuelle : état réel du profil + moteur ──
-            A2MConfigStatsCard(
+            // ── Configuration actuelle : nom du serveur sélectionné seulement ──
+            A2MConfigNameCard(
                 hasServer = uiState.selectedProfileId != -1L,
                 name = uiState.selectedProfileName,
-                protocol = selectedProtocol,
-                address = selectedAddress,
-                exitDelay = exitDelay,
-                isTesting = testableGroup != null && testableGroup.tag in groupsState.testingGroups,
-                exitIp = exitIp,
-                isRefreshingIp = isRefreshingIp,
-                onPing = {
-                    if (serviceStatus != Status.Started) {
-                        toastMessage = "Démarrez le tunnel pour mesurer la latence"
-                    } else {
-                        testableGroup?.let { groupsViewModel.urlTestGroup(it.tag) }
-                    }
-                },
-                onRefreshIp = {
-                    coroutineScope.launch {
-                        isRefreshingIp = true
-                        exitIp = fetchExitIp()
-                        isRefreshingIp = false
-                    }
-                },
+                onClick = { onNavigate(A2MRoutes.SERVERS) },
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -757,20 +678,13 @@ private fun RowScope.VerticalRule() {
     )
 }
 
-// ── Carte configuration actuelle : état réel du profil ─────────────────────
+// ── Carte configuration actuelle : nom du serveur sélectionné seulement ────
 
 @Composable
-private fun A2MConfigStatsCard(
+private fun A2MConfigNameCard(
     hasServer: Boolean,
     name: String?,
-    protocol: String?,
-    address: String?,
-    exitDelay: Int,
-    isTesting: Boolean,
-    exitIp: String?,
-    isRefreshingIp: Boolean,
-    onPing: () -> Unit,
-    onRefreshIp: () -> Unit,
+    onClick: () -> Unit,
 ) {
     Column(
         modifier =
@@ -779,6 +693,7 @@ private fun A2MConfigStatsCard(
             .clip(A2MShapes.card)
             .background(A2MColors.CardBrush)
             .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         Row(
@@ -806,143 +721,14 @@ private fun A2MConfigStatsCard(
             )
         }
 
-        ConfigStatRow("Profil", name ?: "Aucun profil sélectionné")
-        ConfigStatRow("Protocole", protocol ?: "—")
-        ConfigStatRow("Serveur", address ?: "—")
-
-        // Latence réelle de sortie + bouton PING (test réel du groupe actif)
-        Row(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "Latence",
-                style = MaterialTheme.typography.bodyMedium,
-                color = A2MColors.Muted,
-                modifier = Modifier.weight(1f),
-            )
-            if (isTesting) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(15.dp),
-                    strokeWidth = 2.dp,
-                    color = A2MColors.Accent,
-                )
-            } else {
-                Text(
-                    text = if (exitDelay > 0) "$exitDelay ms" else "—",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color =
-                    when {
-                        exitDelay <= 0 -> A2MColors.Faint
-                        exitDelay <= 120 -> A2MColors.Accent
-                        exitDelay <= 300 -> A2MColors.Amber
-                        else -> A2MColors.Danger
-                    },
-                )
-            }
-            Box(
-                modifier =
-                Modifier
-                    .padding(start = 12.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(A2MColors.Tile)
-                    .clickable(onClick = onPing)
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-            ) {
-                Text(
-                    text = "PING",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = A2MColors.Accent,
-                )
-            }
-        }
-
-        // IP de sortie réelle (récupérée via api.ipify quand le tunnel est actif)
-        Row(
-            modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Language,
-                contentDescription = null,
-                tint = A2MColors.Faint,
-                modifier = Modifier.size(17.dp),
-            )
-            Text(
-                text = "IP de sortie",
-                style = MaterialTheme.typography.bodyMedium,
-                color = A2MColors.Muted,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text =
-                when {
-                    exitIp != null -> exitIp
-                    isRefreshingIp -> "…"
-                    else -> "—"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = FontFamily.Monospace,
-                color = if (exitIp != null) A2MColors.Text else A2MColors.Faint,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (isRefreshingIp) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(15.dp),
-                    strokeWidth = 2.dp,
-                    color = A2MColors.Accent,
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Filled.Refresh,
-                    contentDescription = "Actualiser l'IP",
-                    tint = A2MColors.Muted,
-                    modifier =
-                    Modifier
-                        .size(17.dp)
-                        .clickable(onClick = onRefreshIp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ConfigStatRow(
-    label: String,
-    value: String,
-) {
-    Row(
-        modifier =
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
         Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = A2MColors.Muted,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = A2MColors.Text,
+            text = if (hasServer) (name?.takeIf { it.isNotBlank() } ?: "Sans nom") else "Choisir un serveur",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = if (hasServer) A2MColors.Text else A2MColors.Muted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 10.dp),
         )
     }
 }

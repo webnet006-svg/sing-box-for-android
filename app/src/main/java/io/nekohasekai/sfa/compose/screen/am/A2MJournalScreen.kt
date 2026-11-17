@@ -28,6 +28,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,6 +65,8 @@ fun A2MJournalScreen(
 ) {
     val uiState by logViewModel.uiState.collectAsState()
     val scaffoldPadding = LocalScaffoldPadding.current
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     val listState = rememberLazyListState()
     // `isAtBottom` du ViewModel porte l'état « auto-scroll activé » (même logique que LogScreen).
     val autoScrollEnabled by logViewModel.isAtBottom.collectAsState()
@@ -154,6 +159,16 @@ fun A2MJournalScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = A2MColors.Muted,
                 )
+            }
+            TextButton(onClick = {
+                clipboard.setText(
+                    AnnotatedString(
+                        uiState.logs.joinToString("\n") { it.entry.message },
+                    ),
+                )
+                android.widget.Toast.makeText(context, "Journal copié", android.widget.Toast.LENGTH_SHORT).show()
+            }) {
+                Text("Copier", color = A2MColors.Accent)
             }
             TextButton(onClick = { logViewModel.clearLogs() }) {
                 Text("Effacer", color = A2MColors.Muted)

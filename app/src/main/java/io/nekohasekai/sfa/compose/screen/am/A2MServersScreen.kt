@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -149,6 +150,31 @@ fun A2MServersScreen(
         }
     }
 
+    /** Partage réel : lien d'abonnement (distant) ou contenu de la config (local). */
+    fun shareProfile(profile: Profile) {
+        coroutineScope.launch(Dispatchers.IO) {
+            val text =
+                when (profile.typed.type) {
+                    TypedProfile.Type.Remote -> profile.typed.remoteURL.takeIf { it.isNotBlank() }
+                    else -> null
+                } ?: runCatching { java.io.File(profile.typed.path).readText() }.getOrNull()
+            withContext(Dispatchers.Main) {
+                if (text.isNullOrBlank()) {
+                    importMessage = "Rien à partager : configuration vide"
+                } else {
+                    val send =
+                        android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(android.content.Intent.EXTRA_TEXT, text)
+                        }
+                    context.startActivity(
+                        android.content.Intent.createChooser(send, "Partager « ${profile.name} »"),
+                    )
+                }
+            }
+        }
+    }
+
     val fileLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri != null) {
@@ -267,6 +293,7 @@ fun A2MServersScreen(
                             }
                         },
                         onDelete = { pendingDelete = profile },
+                        onShare = { shareProfile(profile) },
                     )
                 }
             }
@@ -535,6 +562,7 @@ private fun ServerRow(
     onToggleAutoUpdate: () -> Unit,
     onClick: () -> Unit,
     onDelete: () -> Unit,
+    onShare: () -> Unit,
 ) {
     Row(
         modifier =
@@ -622,6 +650,15 @@ private fun ServerRow(
                     color = if (autoUpdate) A2MColors.Accent else A2MColors.Muted,
                 )
             }
+        }
+
+        IconButton(onClick = onShare) {
+            Icon(
+                imageVector = Icons.Filled.Share,
+                contentDescription = "Partager",
+                tint = A2MColors.Muted,
+                modifier = Modifier.size(20.dp),
+            )
         }
 
         IconButton(onClick = onDelete) {
