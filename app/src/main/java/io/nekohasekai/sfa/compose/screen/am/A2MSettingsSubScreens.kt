@@ -64,7 +64,7 @@ import kotlinx.coroutines.withContext
  */
 
 @Composable
-internal fun A2MSubScreenHeader(
+private fun A2MSubScreenHeader(
     title: String,
     subtitle: String,
     onBack: () -> Unit,
@@ -108,7 +108,7 @@ internal fun A2MSubScreenHeader(
 }
 
 @Composable
-internal fun SubSectionLabel(text: String) {
+private fun SubSectionLabel(text: String) {
     Text(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelMedium,
