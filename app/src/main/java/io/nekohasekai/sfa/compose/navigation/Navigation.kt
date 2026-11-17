@@ -16,8 +16,10 @@ import io.nekohasekai.sfa.compose.screen.am.A2MJournalScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MRoutingScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MServersScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsConnectionScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MSettingsAutomationScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsDnsScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsEngineScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MSettingsHotspotScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MTUNHomeScreen
 import io.nekohasekai.sfa.compose.screen.configuration.NewProfileScreen
@@ -202,6 +204,21 @@ fun NavHost(
         composable(A2MRoutes.SETTINGS_ENGINE) {
             A2MSettingsEngineScreen(
                 serviceStatus = serviceStatus,
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.SETTINGS_HOTSPOT) {
+            A2MSettingsHotspotScreen(
+                serviceStatus = serviceStatus,
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.SETTINGS_AUTOMATION) {
+            A2MSettingsAutomationScreen(
                 onBack = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
             )

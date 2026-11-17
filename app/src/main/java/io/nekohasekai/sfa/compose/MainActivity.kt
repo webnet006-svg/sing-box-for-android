@@ -276,6 +276,10 @@ class MainActivity :
             pendingNavigationRoute.value = route
         }
         val uri = intent.data ?: return
+        if (uri.scheme == "a2mtun") {
+            handleA2MTunnelLink(uri)
+            return
+        }
         if (uri.scheme == "sing-box") {
             val target = if (uri.isOpaque) Uri.parse("sing-box://" + uri.schemeSpecificPart) else uri
             if (target.host == "taildrop") {
@@ -347,6 +351,60 @@ class MainActivity :
                         }
                     }
                 }
+        }
+    }
+
+    /** Liens d'automatisation : a2mtun://connect, disconnect, toggle, open, add/<lien>. */
+    private fun handleA2MTunnelLink(uri: Uri) {
+        when (uri.host) {
+            "connect" -> {
+                pendingNavigationRoute.value = "a2m/home"
+                startService()
+            }
+            "disconnect" -> {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    BoxService.stop()
+                }
+            }
+            "toggle" -> {
+                if (currentServiceStatus == Status.Started || currentServiceStatus == Status.Starting) {
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        BoxService.stop()
+                    }
+                } else {
+                    pendingNavigationRoute.value = "a2m/home"
+                    startService()
+                }
+            }
+            "open" -> Unit // l'app est déjà portée au premier plan par l'ouverture du lien
+            "add" -> {
+                val link = uri.pathSegments?.firstOrNull()
+                if (link.isNullOrBlank()) {
+                    pendingIntentErrorMessage = "Lien de configuration manquant"
+                    return
+                }
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val importer = io.nekohasekai.sfa.dams.importer.ClipboardImporter(this@MainActivity)
+                    when (val outcome = importer.importSubscription(link, asRemote = true)) {
+                        is io.nekohasekai.sfa.dams.importer.ClipboardImporter.Outcome.Success -> {
+                            withContext(Dispatchers.Main) {
+                                pendingNavigationRoute.value = "a2m/servers"
+                                android.widget.Toast.makeText(
+                                    this@MainActivity,
+                                    "Configuration importée",
+                                    android.widget.Toast.LENGTH_SHORT,
+                                ).show()
+                            }
+                        }
+                        is io.nekohasekai.sfa.dams.importer.ClipboardImporter.Outcome.Error -> {
+                            withContext(Dispatchers.Main) {
+                                pendingIntentErrorMessage = outcome.message
+                            }
+                        }
+                    }
+                }
+            }
+            else -> pendingIntentErrorMessage = "Action inconnue : ${uri.host}"
         }
     }
 
@@ -727,7 +785,9 @@ class MainActivity :
         val isA2MSubScreen =
             currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_CONNECTION ||
                 currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_DNS ||
-                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_ENGINE
+                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_ENGINE ||
+                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_HOTSPOT ||
+                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_AUTOMATION
         val isSubScreen = isSettingsSubScreen || isToolsSubScreen || isConnectionsDetail || isProfileRoute || isA2MSubScreen
         // Get LogViewModel instance if we're on the Log screen
         val logViewModel: LogViewModel? =

@@ -47,11 +47,13 @@ object A2MConfigDecorations {
         dns: DnsOverride?,
         engine: EngineOptions?,
         adBlock: Boolean,
+        hotspotPort: Int?,
     ): String {
         var content = raw
         if (bypassPrivate) content = runCatching { withBypassPrivateNetworks(content) }.getOrDefault(content)
         if (dns != null) content = runCatching { withDnsOverride(content, dns) }.getOrDefault(content)
         if (engine != null) content = runCatching { withEngine(content, engine) }.getOrDefault(content)
+        if (hotspotPort != null) content = runCatching { withHotspotProxy(content, hotspotPort) }.getOrDefault(content)
         if (adBlock) content = runCatching { withAdBlock(content) }.getOrDefault(content)
         return content
     }
@@ -232,6 +234,35 @@ object A2MConfigDecorations {
                 )
             }
 
+            encode(root)
+        }.getOrDefault(content)
+
+    // ── Partage par point d'accès ────────────────────────────────────────────
+
+    /**
+     * Partage VPN : ajoute (ou remplace) un inbound mixte HTTP+SOCKS5 écoutant
+     * sur toutes les interfaces, utilisé par les clients du point d'accès.
+     */
+    fun withHotspotProxy(
+        content: String,
+        port: Int,
+    ): String =
+        runCatching {
+            val root = parseRoot(content)
+            val inbounds = (root["inbounds"] as? JsonArray)?.toMutableList() ?: mutableListOf()
+            val hotspot = buildJsonObject {
+                put("type", "mixed")
+                put("tag", "a2m-hotspot")
+                put("listen", "0.0.0.0")
+                put("listen_port", port)
+            }
+            val index = inbounds.indexOfFirst { outboundTag(it) == "a2m-hotspot" }
+            if (index >= 0) {
+                inbounds[index] = hotspot
+            } else {
+                inbounds.add(hotspot)
+            }
+            root["inbounds"] = JsonArray(inbounds)
             encode(root)
         }.getOrDefault(content)
 

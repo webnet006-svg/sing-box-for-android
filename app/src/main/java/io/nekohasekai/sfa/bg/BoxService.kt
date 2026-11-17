@@ -265,6 +265,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             dns = dnsOverride,
             engine = engine,
             adBlock = Settings.adBlockEnabled,
+            hotspotPort = if (Settings.hotspotProxyEnabled) Settings.hotspotProxyPort else null,
         )
     }
 

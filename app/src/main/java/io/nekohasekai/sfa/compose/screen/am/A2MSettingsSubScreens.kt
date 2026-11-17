@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -14,10 +15,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Autorenew
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -31,7 +41,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import io.nekohasekai.sfa.compose.base.UiEvent
 import io.nekohasekai.sfa.compose.base.rememberApplyServiceChangeNotifier
@@ -398,6 +413,270 @@ fun A2MSettingsDnsScreen(
                 text = "Les changements s'appliquent au prochain démarrage ou rechargement du tunnel.",
                 style = MaterialTheme.typography.bodySmall,
                 color = A2MColors.Faint,
+            )
+        }
+    }
+}
+
+// ── Sous-écran Partage par point d'accès ────────────────────────────────────
+
+@Composable
+fun A2MSettingsHotspotScreen(
+    serviceStatus: Status,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scaffoldPadding = LocalScaffoldPadding.current
+    val notifyApplyChange = rememberApplyServiceChangeNotifier(serviceStatus)
+
+    var enabled by remember { mutableStateOf(Settings.hotspotProxyEnabled) }
+    var portText by remember { mutableStateOf(Settings.hotspotProxyPort.toString()) }
+
+    val firstRun = remember { mutableStateOf(true) }
+    LaunchedEffect(enabled, portText) {
+        if (firstRun.value) {
+            firstRun.value = false
+            return@LaunchedEffect
+        }
+        Settings.hotspotProxyEnabled = enabled
+        portText.toIntOrNull()?.takeIf { it in 1..65535 }?.let { Settings.hotspotProxyPort = it }
+        delay(900)
+        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
+    }
+
+    LazyColumn(
+        modifier =
+        modifier
+            .fillMaxSize()
+            .background(A2MColors.BackgroundBrush)
+            .padding(scaffoldPadding),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        item {
+            A2MSubScreenHeader(
+                title = "Partage par point d'accès",
+                subtitle = "Partage la connexion du tunnel aux appareils de votre point d'accès.",
+                onBack = onBack,
+            )
+        }
+
+        item { SubSectionLabel("Partage") }
+
+        item {
+            SubScreenCard {
+                SettingSwitch(
+                    title = "Partager le VPN par point d'accès",
+                    subtitle = "Lance un proxy HTTP et SOCKS5 sur un port à l'intérieur du VPN actif.",
+                    checked = enabled,
+                    onCheckedChange = { enabled = it },
+                )
+            }
+        }
+
+        item { SubSectionLabel("Port") }
+
+        item {
+            SubScreenCard {
+                Text(
+                    text = "Port d'écoute",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = A2MColors.Muted,
+                )
+                A2MOutlinedField(
+                    value = portText,
+                    onValueChange = { portText = it },
+                    placeholder = "2080",
+                    number = true,
+                )
+                Text(
+                    text =
+                    "Les appareils connectés au point d'accès utilisent l'adresse IP de ce téléphone " +
+                        "et ce port comme proxy HTTP ou SOCKS5.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = A2MColors.Muted,
+                )
+            }
+        }
+
+        item {
+            Text(
+                text =
+                "Ne partagez ces identifiants qu'avec des appareils de confiance. " +
+                    "Les applications clientes qui ignorent le proxy système et le trafic QUIC/UDP peuvent le contourner.",
+                style = MaterialTheme.typography.bodySmall,
+                color = A2MColors.Faint,
+            )
+        }
+    }
+}
+
+// ── Sous-écran Automatisation ───────────────────────────────────────────────
+
+@Composable
+fun A2MSettingsAutomationScreen(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scaffoldPadding = LocalScaffoldPadding.current
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+
+    LazyColumn(
+        modifier =
+        modifier
+            .fillMaxSize()
+            .background(A2MColors.BackgroundBrush)
+            .padding(scaffoldPadding),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        item {
+            A2MSubScreenHeader(
+                title = "Automatisation",
+                subtitle =
+                "Ouvrez ces liens depuis un navigateur, un raccourci ou une application " +
+                    "d'automatisation pour contrôler le tunnel. Connexion et bascule agissent " +
+                    "sur la configuration sélectionnée.",
+                onBack = onBack,
+            )
+        }
+
+        item { SubSectionLabel("Tunnel") }
+
+        item {
+            SubScreenCard {
+                AutomationActionRow(
+                    icon = Icons.Filled.Bolt,
+                    title = "Connexion",
+                    link = "a2mtun://connect",
+                    clipboard = clipboard,
+                    context = context,
+                )
+                HorizontalDivider(color = A2MColors.CardBorder)
+                AutomationActionRow(
+                    icon = Icons.Filled.Close,
+                    title = "Déconnexion",
+                    link = "a2mtun://disconnect",
+                    clipboard = clipboard,
+                    context = context,
+                )
+                HorizontalDivider(color = A2MColors.CardBorder)
+                AutomationActionRow(
+                    icon = Icons.Filled.Autorenew,
+                    title = "Basculer la connexion",
+                    link = "a2mtun://toggle",
+                    clipboard = clipboard,
+                    context = context,
+                )
+                HorizontalDivider(color = A2MColors.CardBorder)
+                AutomationActionRow(
+                    icon = Icons.Filled.PhoneAndroid,
+                    title = "Ouvrir l'application",
+                    link = "a2mtun://open",
+                    clipboard = clipboard,
+                    context = context,
+                )
+            }
+        }
+
+        item { SubSectionLabel("Importation") }
+
+        item {
+            SubScreenCard {
+                AutomationActionRow(
+                    icon = Icons.Filled.Add,
+                    title = "Ajouter une configuration",
+                    link = "a2mtun://add/<lien-de-configuration>",
+                    clipboard = clipboard,
+                    context = context,
+                )
+                HorizontalDivider(color = A2MColors.CardBorder)
+                AutomationActionRow(
+                    icon = Icons.Filled.RssFeed,
+                    title = "Ajouter un abonnement",
+                    link = "a2mtun://add/<url-abonnement-https>",
+                    clipboard = clipboard,
+                    context = context,
+                )
+            }
+        }
+
+        item {
+            SubScreenCard {
+                listOf(
+                    "Sur Android, utilisez Tasker ou toute application capable d'ouvrir un lien.",
+                    "Copiez un lien ci-dessus et collez-le, par exemple a2mtun://toggle.",
+                ).forEachIndexed { index, step ->
+                    if (index > 0) HorizontalDivider(color = A2MColors.CardBorder)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "${index + 1}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = A2MColors.Accent,
+                        )
+                        Text(
+                            text = step,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = A2MColors.Text,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AutomationActionRow(
+    icon: ImageVector,
+    title: String,
+    link: String,
+    clipboard: ClipboardManager,
+    context: android.content.Context,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier =
+            Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(A2MColors.Accent.copy(alpha = 0.14f)),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = A2MColors.Accent,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = A2MColors.Text,
+            )
+            Text(
+                text = link,
+                style = MaterialTheme.typography.bodySmall,
+                color = A2MColors.Muted,
+            )
+        }
+        IconButton(onClick = {
+            clipboard.setText(AnnotatedString(link))
+            android.widget.Toast.makeText(context, "Copié", android.widget.Toast.LENGTH_SHORT).show()
+        }) {
+            Icon(
+                imageVector = Icons.Filled.ContentCopy,
+                contentDescription = "Copier $title",
+                tint = A2MColors.Muted,
+                modifier = Modifier.size(20.dp),
             )
         }
     }

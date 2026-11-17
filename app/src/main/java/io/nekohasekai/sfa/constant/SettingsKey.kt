@@ -78,4 +78,6 @@ object SettingsKey {
     const val ENGINE_MUX_ENABLED = "engine_mux_enabled"
     const val ENGINE_LOG_LEVEL = "engine_log_level"
     const val BYPASS_PRIVATE_NETWORKS = "bypass_private_networks"
+    const val HOTSPOT_PROXY_ENABLED = "hotspot_proxy_enabled"
+    const val HOTSPOT_PROXY_PORT = "hotspot_proxy_port"
 }

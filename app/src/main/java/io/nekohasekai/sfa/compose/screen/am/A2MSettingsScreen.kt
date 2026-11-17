@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -296,6 +298,39 @@ fun A2MSettingsScreen(
                         title = "Routage",
                         subtitle = "Par application · groupes de sortie",
                         onClick = { onNavigate(A2MRoutes.ROUTING) },
+                    )
+                }
+            }
+        }
+
+        if (matches("hotspot", "partage", "automatisation", "automat", "liens")) {
+            item { SubSectionLabel("Partage et automatisation") }
+            item {
+                Column(
+                    modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(A2MShapes.card)
+                        .background(A2MColors.CardBrush)
+                        .border(1.dp, A2MColors.CardBorder, A2MShapes.card),
+                ) {
+                    SettingTileRow(
+                        icon = Icons.Filled.Wifi,
+                        tileColor = Color(0xFF3D6EF7),
+                        title = "Partage hotspot",
+                        subtitle =
+                        "Proxy HTTP/SOCKS5 : " +
+                            (if (io.nekohasekai.sfa.database.Settings.hotspotProxyEnabled) "on · port " +
+                            io.nekohasekai.sfa.database.Settings.hotspotProxyPort else "off"),
+                        onClick = { onNavigate(A2MRoutes.SETTINGS_HOTSPOT) },
+                    )
+                    HorizontalDivider(color = A2MColors.CardBorder)
+                    SettingTileRow(
+                        icon = Icons.Filled.Bolt,
+                        tileColor = Color(0xFF16E0C4),
+                        title = "Automatisation",
+                        subtitle = "Liens de contrôle a2mtun://",
+                        onClick = { onNavigate(A2MRoutes.SETTINGS_AUTOMATION) },
                     )
                 }
             }

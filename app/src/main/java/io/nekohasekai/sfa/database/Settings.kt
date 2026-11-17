@@ -118,6 +118,10 @@ object Settings {
     var engineMuxEnabled by dataStore.boolean(SettingsKey.ENGINE_MUX_ENABLED) { false }
     var engineLogLevel by dataStore.string(SettingsKey.ENGINE_LOG_LEVEL) { "auto" }
 
+    /** Partage VPN par point d'accès : inbound mixte (HTTP+SOCKS5) écoutant sur le LAN. */
+    var hotspotProxyEnabled by dataStore.boolean(SettingsKey.HOTSPOT_PROXY_ENABLED) { false }
+    var hotspotProxyPort by dataStore.int(SettingsKey.HOTSPOT_PROXY_PORT) { 2080 }
+
     var systemProxyEnabled by dataStore.boolean(SettingsKey.SYSTEM_PROXY_ENABLED) { true }
 
     var privilegeSettingsEnabled by dataStore.boolean(SettingsKey.PRIVILEGE_SETTINGS_ENABLED) { false }

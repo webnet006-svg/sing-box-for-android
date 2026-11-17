@@ -193,6 +193,31 @@ class A2MConfigDecorationsTest {
         assertFalse(root.containsKey("log"))
     }
 
+    // ── Partage par point d'accès ─────────────────────────────────────────────
+
+    @Test
+    fun hotspotAddsMixedInboundOnLan() {
+        val config = """{"outbounds":[{"type":"vmess","tag":"proxy"}]}"""
+        val root = parse(A2MConfigDecorations.withHotspotProxy(config, 2080))
+        val inbound = root["inbounds"]!!.jsonArray.first { it.jsonObject["tag"]?.jsonPrimitive?.content == "a2m-hotspot" }.jsonObject
+        assertEquals("mixed", inbound["type"]!!.jsonPrimitive.content)
+        assertEquals("0.0.0.0", inbound["listen"]!!.jsonPrimitive.content)
+        assertEquals(2080, inbound["listen_port"]!!.jsonPrimitive.content.toInt())
+    }
+
+    @Test
+    fun hotspotReplacesExistingEntryInsteadOfDuplicating() {
+        val config = """{"inbounds":[{"type":"tun","tag":"tun-in"}]}"""
+        val once = A2MConfigDecorations.withHotspotProxy(config, 2080)
+        val twice = A2MConfigDecorations.withHotspotProxy(once, 7893)
+        val inbounds = parse(twice)["inbounds"]!!.jsonArray
+        assertEquals(2, inbounds.size)
+        assertEquals(
+            7893,
+            inbounds.first { it.jsonObject["tag"]?.jsonPrimitive?.content == "a2m-hotspot" }.jsonObject["listen_port"]!!.jsonPrimitive.content.toInt(),
+        )
+    }
+
     // ── Chaîne complète ──────────────────────────────────────────────────────
 
     @Test
@@ -211,6 +236,7 @@ class A2MConfigDecorationsTest {
                 logLevel = "warn",
             ),
             adBlock = true,
+            hotspotPort = null,
         )
         val root = parse(decorated)
         val rules = root["route"]!!.jsonObject["rules"]!!.jsonArray
@@ -233,6 +259,7 @@ class A2MConfigDecorationsTest {
                 dns = null,
                 engine = null,
                 adBlock = false,
+                hotspotPort = null,
             ),
         )
     }
@@ -248,6 +275,7 @@ class A2MConfigDecorationsTest {
                 dns = A2MConfigDecorations.DnsOverride("https", "1.1.1.1", "1.1.1.1"),
                 engine = A2MConfigDecorations.EngineOptions("1500", 1500, "gvisor", true, "info"),
                 adBlock = true,
+                hotspotPort = null,
             ),
         )
     }
