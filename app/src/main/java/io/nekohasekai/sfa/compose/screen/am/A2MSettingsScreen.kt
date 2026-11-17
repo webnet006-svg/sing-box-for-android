@@ -1,5 +1,9 @@
 package io.nekohasekai.sfa.compose.screen.am
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,15 +19,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,43 +40,71 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.sfa.BuildConfig
-import io.nekohasekai.sfa.compose.base.UiEvent
-import io.nekohasekai.sfa.compose.base.rememberApplyServiceChangeNotifier
+import io.nekohasekai.sfa.compose.navigation.A2MRoutes
+import io.nekohasekai.sfa.compose.screen.dashboard.DashboardViewModel
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
 import io.nekohasekai.sfa.constant.ServiceMode
 import io.nekohasekai.sfa.constant.Status
-import io.nekohasekai.sfa.database.Settings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import android.provider.Settings as AndroidSettings
 
 /**
- * Réglages A2M TUN.
- * Uniquement des paramètres réellement appliqués par le service.
+ * Réglages A2M TUN, façon SniTunnel : recherche, ID d'appareil, sections
+ * avec tuiles colorées et sous-écrans. Paramètres réels uniquement.
  */
 @Composable
 fun A2MSettingsScreen(
     serviceStatus: Status,
     onNavigate: (String) -> Unit = {},
+    dashboardViewModel: DashboardViewModel,
     modifier: Modifier = Modifier,
 ) {
     val scaffoldPadding = LocalScaffoldPadding.current
-    val notifyApplyChange = rememberApplyServiceChangeNotifier(serviceStatus)
+    val context = LocalContext.current
 
-    var dynamicNotification by remember { mutableStateOf(Settings.dynamicNotification) }
-    var allowBypass by remember { mutableStateOf(Settings.allowBypass) }
-    var serviceMode by remember { mutableStateOf(Settings.serviceMode) }
-
+    var serviceMode by remember { mutableStateOf(ServiceMode.VPN) }
     LaunchedEffect(serviceStatus) {
         serviceMode =
             withContext(Dispatchers.IO) {
-                Settings.detectServiceMode()
+                io.nekohasekai.sfa.database.Settings.detectServiceMode()
             }
     }
     val coreVersion = remember { runCatching { Libbox.version() }.getOrDefault("—") }
+
+    // ID d'appareil réel (ANDROID_ID) pour la carte « ID de cet appareil ».
+    val deviceId = remember {
+        AndroidSettings.Secure.getString(context.contentResolver, AndroidSettings.Secure.ANDROID_ID) ?: "—"
+    }
+
+    // DNS réellement déclaré par la config active (pour le sous-titre de la ligne DNS).
+    val uiState by dashboardViewModel.uiState.collectAsState()
+    var dnsServers by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(uiState.selectedProfileId, uiState.profiles) {
+        val profile = uiState.profiles.firstOrNull { it.id == uiState.selectedProfileId }
+        dnsServers =
+            withContext(Dispatchers.IO) {
+                profile?.let { A2MProfileInfo.dnsServers(it) } ?: emptyList()
+            }
+    }
+
+    var searchQuery by remember { mutableStateOf("") }
+
+    // Filtre réel : une ligne est visible si sa recherche correspond.
+    fun matches(vararg keywords: String): Boolean {
+        val query = searchQuery.trim()
+        if (query.isEmpty()) return true
+        return keywords.any { it.contains(query, ignoreCase = true) }
+    }
 
     LazyColumn(
         modifier =
@@ -82,133 +119,268 @@ fun A2MSettingsScreen(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     text = "Réglages",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
                     color = A2MColors.Text,
                 )
-                Text(
-                    text = "Paramètres de l'application et du moteur",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = A2MColors.Muted,
-                )
             }
         }
 
         item {
-            SettingsCard(title = "Notifications") {
-                SettingSwitch(
-                    title = "Notification dynamique",
-                    subtitle = "Affiche le débit et l'état du tunnel dans la notification",
-                    checked = dynamicNotification,
-                    onCheckedChange = {
-                        dynamicNotification = it
-                        Settings.dynamicNotification = it
-                    },
+            A2MSettingsSearchField(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+            )
+        }
+
+        item {
+            // Carte ID d'appareil (identifiant réel Android, copiable).
+            Row(
+                modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(A2MShapes.card)
+                    .background(A2MColors.CardBrush)
+                    .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Shield,
+                    contentDescription = null,
+                    tint = A2MColors.Accent,
+                    modifier = Modifier.size(22.dp),
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "ID de cet appareil",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = A2MColors.Text,
+                    )
+                    Text(
+                        text = deviceId,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = A2MColors.Muted,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Filled.ContentCopy,
+                    contentDescription = "Copier l'identifiant",
+                    tint = A2MColors.Muted,
+                    modifier =
+                    Modifier
+                        .size(19.dp)
+                        .clickable {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("A2M device ID", deviceId))
+                            Toast.makeText(context, "Identifiant copié", Toast.LENGTH_SHORT).show()
+                        },
                 )
             }
         }
 
-        item {
-            SettingsCard(title = "Connexion") {
-                SettingSwitch(
-                    title = "Autoriser le contournement du VPN",
-                    subtitle = "Autorise les applications à ignorer le tunnel (redémarrage requis)",
-                    checked = allowBypass,
-                    onCheckedChange = {
-                        allowBypass = it
-                        Settings.allowBypass = it
-                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
-                    },
-                )
+        if (matches("apparence", "theme", "thème")) {
+            item { SubSectionLabel("Apparence") }
+            item {
+                Column(
+                    modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(A2MShapes.card)
+                        .background(A2MColors.CardBrush)
+                        .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
+                        .padding(18.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Thème",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = A2MColors.Text,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = "Sombre A2M",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = A2MColors.Muted,
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.ChevronRight,
+                            contentDescription = null,
+                            tint = A2MColors.Faint,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
             }
         }
 
-        item {
-            SettingsCard(title = "Navigation") {
-                SettingLink(
-                    icon = Icons.Filled.SwapVert,
-                    title = "Routage",
-                    subtitle = "Groupes de sortie, routage par application, DNS",
-                    onClick = { onNavigate(io.nekohasekai.sfa.compose.navigation.A2MRoutes.ROUTING) },
-                )
-                HorizontalDivider(color = A2MColors.CardBorder)
-                SettingLink(
-                    icon = Icons.Filled.Description,
-                    title = "Journal",
-                    subtitle = "Journaux du moteur en direct",
-                    onClick = { onNavigate(io.nekohasekai.sfa.compose.navigation.A2MRoutes.JOURNAL) },
-                )
+        if (matches("connexion", "notification", "tunnel", "protection")) {
+            item { SubSectionLabel("Connexion") }
+            item {
+                Column(
+                    modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(A2MShapes.card)
+                        .background(A2MColors.CardBrush)
+                        .border(1.dp, A2MColors.CardBorder, A2MShapes.card),
+                ) {
+                    SettingTileRow(
+                        icon = Icons.Filled.Shield,
+                        tileColor = Color(0xFF3D6EF7),
+                        title = "Connexion",
+                        subtitle = "Notification dynamique : " +
+                            if (io.nekohasekai.sfa.database.Settings.dynamicNotification) "Activée" else "Désactivée",
+                        onClick = { onNavigate(A2MRoutes.SETTINGS_CONNECTION) },
+                    )
+                    if (matches("journal", "log")) {
+                        HorizontalDivider(color = A2MColors.CardBorder)
+                        SettingTileRow(
+                            icon = Icons.Filled.Description,
+                            tileColor = Color(0xFF5B6470),
+                            title = "Journal",
+                            subtitle = "Journaux du moteur en direct",
+                            onClick = { onNavigate(A2MRoutes.JOURNAL) },
+                        )
+                    }
+                }
             }
         }
 
-        item {
-            SettingsCard(title = "Application") {
-                SettingInfo("Nom", "A2M TUN")
-                HorizontalDivider(color = A2MColors.CardBorder)
-                SettingInfo("Version", BuildConfig.VERSION_NAME)
-                HorizontalDivider(color = A2MColors.CardBorder)
-                SettingInfo("Moteur", coreVersion)
-                HorizontalDivider(color = A2MColors.CardBorder)
-                SettingInfo(
-                    "Mode",
-                    if (serviceMode == ServiceMode.VPN) "VPN (TUN)" else "Proxy local",
-                )
-                HorizontalDivider(color = A2MColors.CardBorder)
-                SettingInfo("Thème", "Sombre A2M")
+        if (matches("reseau", "réseau", "dns", "routage", "network")) {
+            item { SubSectionLabel("Réseau") }
+            item {
+                Column(
+                    modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(A2MShapes.card)
+                        .background(A2MColors.CardBrush)
+                        .border(1.dp, A2MColors.CardBorder, A2MShapes.card),
+                ) {
+                    SettingTileRow(
+                        icon = Icons.Filled.Dns,
+                        tileColor = Color(0xFF2EAF6F),
+                        title = "DNS",
+                        subtitle =
+                        if (dnsServers.isEmpty()) {
+                            "Aucun serveur déclaré"
+                        } else {
+                            "${dnsServers.first()}${if (dnsServers.size > 1) " + ${dnsServers.size - 1} autre(s)" else ""}"
+                        },
+                        onClick = { onNavigate(A2MRoutes.SETTINGS_DNS) },
+                    )
+                    HorizontalDivider(color = A2MColors.CardBorder)
+                    SettingTileRow(
+                        icon = Icons.Filled.SwapVert,
+                        tileColor = Color(0xFF2EAF6F),
+                        title = "Routage",
+                        subtitle = "Par application · groupes de sortie",
+                        onClick = { onNavigate(A2MRoutes.ROUTING) },
+                    )
+                }
+            }
+        }
+
+        if (matches("propos", "version", "application", "moteur", "mode")) {
+            item { SubSectionLabel("À propos") }
+            item {
+                Column(
+                    modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(A2MShapes.card)
+                        .background(A2MColors.CardBrush)
+                        .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    SettingInfo("Nom", "A2M TUN")
+                    HorizontalDivider(color = A2MColors.CardBorder)
+                    SettingInfo("Version", BuildConfig.VERSION_NAME)
+                    HorizontalDivider(color = A2MColors.CardBorder)
+                    SettingInfo("Moteur", coreVersion)
+                    HorizontalDivider(color = A2MColors.CardBorder)
+                    SettingInfo(
+                        "Mode",
+                        if (serviceMode == ServiceMode.VPN) "VPN (TUN)" else "Proxy local",
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun SettingsCard(
+private fun SubSectionLabel(text: String) {
+    Text(
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.Bold,
+        color = A2MColors.Faint,
+        modifier = Modifier.padding(start = 2.dp),
+    )
+}
+
+@Composable
+private fun SettingTileRow(
+    icon: ImageVector,
+    tileColor: Color,
     title: String,
-    content: @Composable () -> Unit,
+    subtitle: String,
+    onClick: () -> Unit,
 ) {
-    Column(
+    Row(
         modifier =
         Modifier
             .fillMaxWidth()
-            .clip(A2MShapes.card)
-            .background(A2MColors.CardBrush)
-            .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(
-            text = title.uppercase(),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Bold,
-            color = A2MColors.Accent,
-        )
-        content()
-    }
-}
-
-@Composable
-private fun SettingSwitch(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // Tuile colorée façon SniTunnel.
+        Box(
+            modifier =
+            Modifier
+                .size(42.dp)
+                .clip(A2MShapes.tile)
+                .background(tileColor),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
                 color = A2MColors.Text,
             )
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = A2MColors.Muted,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Icon(
+            imageVector = Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = A2MColors.Faint,
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 
@@ -236,47 +408,47 @@ private fun SettingInfo(
     }
 }
 
+/** Champ de recherche compact, style pilule. */
 @Composable
-private fun SettingLink(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
+private fun A2MSettingsSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
 ) {
     Row(
         modifier =
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 6.dp, horizontal = 2.dp),
+            .clip(A2MShapes.chip)
+            .background(A2MColors.CardBrush)
+            .border(1.dp, A2MColors.CardBorder, A2MShapes.chip)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = A2MColors.Accent,
-            modifier = Modifier.size(22.dp),
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = A2MColors.Text,
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = A2MColors.Muted,
-            )
-        }
-        Icon(
-            imageVector = Icons.Filled.ChevronRight,
+            imageVector = Icons.Filled.Search,
             contentDescription = null,
             tint = A2MColors.Faint,
             modifier = Modifier.size(18.dp),
         )
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = A2MColors.Text),
+            cursorBrush = SolidColor(A2MColors.Accent),
+            modifier = Modifier.weight(1f),
+        )
+        if (query.isNotEmpty()) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = "Effacer",
+                tint = A2MColors.Faint,
+                modifier =
+                Modifier
+                    .size(16.dp)
+                    .clickable { onQueryChange("") },
+            )
+        }
     }
 }

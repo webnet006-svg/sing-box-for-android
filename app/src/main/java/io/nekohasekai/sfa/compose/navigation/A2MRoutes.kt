@@ -13,6 +13,10 @@ object A2MRoutes {
     const val SETTINGS = "a2m/settings"
     const val JOURNAL = "a2m/journal"
 
+    /** Sous-écrans de Réglages (façon SniTunnel : Connexion, DNS). */
+    const val SETTINGS_CONNECTION = "a2m/settings/connection"
+    const val SETTINGS_DNS = "a2m/settings/dns"
+
     /** Préfixe commun, utilisé pour la barre de navigation A2M. */
     const val PREFIX = "a2m/"
 }

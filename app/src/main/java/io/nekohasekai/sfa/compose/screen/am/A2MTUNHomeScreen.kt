@@ -103,8 +103,6 @@ private fun formatSession(seconds: Long): String {
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
 
-private suspend fun fetchExitIp(): String? =
-
 @Composable
 fun A2MTUNHomeScreen(
     serviceStatus: Status,
@@ -467,7 +465,7 @@ private fun A2MConnectionOrb(
             val outer = radius - 4.dp.toPx()
             val ticks = 48
             repeat(ticks) { index ->
-                rotate(angle = index * (360f / ticks)) {
+                rotate(degrees = index * (360f / ticks)) {
                     drawLine(
                         color = stateColor.copy(alpha = if (index % 6 == 0) 0.85f else 0.38f),
                         start = Offset(center.x, center.y - inner),

@@ -15,6 +15,8 @@ import androidx.navigation.navArgument
 import io.nekohasekai.sfa.compose.screen.am.A2MJournalScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MRoutingScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MServersScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MSettingsConnectionScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MSettingsDnsScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MTUNHomeScreen
 import io.nekohasekai.sfa.compose.screen.configuration.NewProfileScreen
@@ -174,6 +176,23 @@ fun NavHost(
                         launchSingleTop = true
                     }
                 },
+                dashboardViewModel = dashboardViewModel ?: viewModel(),
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.SETTINGS_CONNECTION) {
+            A2MSettingsConnectionScreen(
+                serviceStatus = serviceStatus,
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.SETTINGS_DNS) {
+            A2MSettingsDnsScreen(
+                dashboardViewModel = dashboardViewModel ?: viewModel(),
+                onBack = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
             )
         }
