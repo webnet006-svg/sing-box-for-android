@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -508,6 +509,25 @@ private fun GroupBlock(
                         .clickable(onClick = onUrlTest),
                 )
             }
+            // Sélection du plus rapide : réel (urlTestDelay mesuré), sinon lance le test.
+            Icon(
+                imageVector = Icons.Filled.Bolt,
+                contentDescription = "Sélectionner le plus rapide",
+                tint = A2MColors.Amber,
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .size(20.dp)
+                    .clickable {
+                        val fastest = group.items
+                            .filter { it.urlTestDelay > 0 }
+                            .minByOrNull { it.urlTestDelay }
+                        if (fastest != null) {
+                            onSelect(fastest.tag)
+                        } else {
+                            onUrlTest()
+                        }
+                    },
+            )
         }
         if (group.selectable) {
             group.items.forEach { item ->
