@@ -41,6 +41,7 @@ object DailyTrafficLog {
                 DailyTraffic(date, download, upload)
             }
             .sortedBy { it.date }
+            .toList()
 
     fun serialize(entries: List<DailyTraffic>): String =
         entries

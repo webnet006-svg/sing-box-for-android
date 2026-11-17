@@ -603,7 +603,7 @@ private fun A2MChipRow(
                 modifier =
                 Modifier
                     .clip(RoundedCornerShape(999.dp))
-                    .background(if (active) A2MColors.Tile else A2MColors.CardBrush)
+                    .background(if (active) A2MColors.Tile else androidx.compose.ui.graphics.Color.Transparent)
                     .border(
                         1.dp,
                         if (active) A2MColors.CardBorderSelected else A2MColors.CardBorder,

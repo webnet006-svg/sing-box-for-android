@@ -18,8 +18,10 @@ import io.nekohasekai.sfa.compose.screen.am.A2MAdvancedModesScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MAntiCensorshipScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MAppearanceScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MRoutingScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MConsumptionScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MServersScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MServerEditorScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MTransfersScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsConnectionScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsAutomationScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MDiagnosticsScreen
