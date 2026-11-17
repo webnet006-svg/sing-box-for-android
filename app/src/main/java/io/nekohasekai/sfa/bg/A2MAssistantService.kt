@@ -1,6 +1,7 @@
 package io.nekohasekai.sfa.bg
 
 import android.content.Context
+import android.os.Bundle
 import android.service.voice.VoiceInteractionService
 import android.service.voice.VoiceInteractionSession
 import android.service.voice.VoiceInteractionSessionService
@@ -15,7 +16,7 @@ import android.service.voice.VoiceInteractionSessionService
 class A2MVoiceInteractionService : VoiceInteractionService()
 
 class A2MVoiceInteractionSessionService : VoiceInteractionSessionService() {
-    override fun onCreateSession(): VoiceInteractionSession = A2MVoiceInteractionSession(this)
+    override fun onNewSession(args: Bundle?): VoiceInteractionSession = A2MVoiceInteractionSession(this)
 }
 
 class A2MVoiceInteractionSession(context: Context) : VoiceInteractionSession(context)

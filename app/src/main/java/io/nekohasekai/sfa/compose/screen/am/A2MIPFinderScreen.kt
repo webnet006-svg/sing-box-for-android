@@ -801,7 +801,7 @@ private class AssistantDiagnostics(
                     context.packageManager.getPackageInfo(
                         context.packageName,
                         android.content.pm.PackageManager.GET_SERVICES,
-                    ).services.any { it.name.endsWith("A2MVoiceInteractionService") }
+                    ).services?.any { it.name.endsWith("A2MVoiceInteractionService") } == true
                 }.getOrDefault(false)
             val current =
                 AndroidSettings.Secure.getString(context.contentResolver, VOICE_INTERACTION_SERVICE)

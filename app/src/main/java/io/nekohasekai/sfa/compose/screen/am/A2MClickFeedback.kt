@@ -42,8 +42,8 @@ object A2MClickFeedback {
 /** Libellé stable du mode de retour tactile (testable en JVM pur). */
 internal fun clickFeedbackLabel(mode: String): String =
     when (mode) {
-        SOUND -> "Son"
-        VIBRATE -> "Vibreur"
-        SILENT -> "Silence"
+        A2MClickFeedback.SOUND -> "Son"
+        A2MClickFeedback.VIBRATE -> "Vibreur"
+        A2MClickFeedback.SILENT -> "Silence"
         else -> mode
     }
