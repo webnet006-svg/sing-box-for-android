@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -258,7 +259,7 @@ fun A2MSettingsScreen(
             }
         }
 
-        if (matches("reseau", "réseau", "dns", "routage", "network")) {
+        if (matches("reseau", "réseau", "dns", "routage", "network", "diagnostic", "panne", "échec", "echec")) {
             item { SubSectionLabel("Réseau") }
             item {
                 Column(
@@ -298,6 +299,14 @@ fun A2MSettingsScreen(
                         title = "Routage",
                         subtitle = "Par application · groupes de sortie",
                         onClick = { onNavigate(A2MRoutes.ROUTING) },
+                    )
+                    HorizontalDivider(color = A2MColors.CardBorder)
+                    SettingTileRow(
+                        icon = Icons.Filled.BugReport,
+                        tileColor = Color(0xFFE05C5C),
+                        title = "Diagnostic",
+                        subtitle = "Pourquoi la connexion échoue · vérifications réelles",
+                        onClick = { onNavigate(A2MRoutes.SETTINGS_DIAGNOSTICS) },
                     )
                 }
             }

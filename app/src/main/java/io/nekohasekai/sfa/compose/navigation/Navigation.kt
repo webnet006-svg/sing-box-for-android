@@ -17,6 +17,7 @@ import io.nekohasekai.sfa.compose.screen.am.A2MRoutingScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MServersScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsConnectionScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsAutomationScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MDiagnosticsScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsDnsScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsEngineScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsHotspotScreen
@@ -103,6 +104,7 @@ private val slideOutToLeft: AnimatedContentTransitionScope<*>.() -> androidx.com
 fun NavHost(
     navController: NavHostController,
     serviceStatus: Status = Status.Stopped,
+    lastAlert: Pair<String, String?>? = null,
     showStartFab: Boolean = false,
     showStatusBar: Boolean = false,
     newProfileArgs: NewProfileArgs = NewProfileArgs(),
@@ -220,6 +222,24 @@ fun NavHost(
         composable(A2MRoutes.SETTINGS_AUTOMATION) {
             A2MSettingsAutomationScreen(
                 onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.SETTINGS_DIAGNOSTICS) {
+            A2MDiagnosticsScreen(
+                serviceStatus = serviceStatus,
+                lastAlert = lastAlert,
+                onBack = { navController.popBackStack() },
+                onNavigate = { route ->
+                    navController.navigate(route) {
+                        launchSingleTop = true
+                    }
+                },
+                onRetry = {
+                    navController.popBackStack()
+                    dashboardViewModel?.toggleService()
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }

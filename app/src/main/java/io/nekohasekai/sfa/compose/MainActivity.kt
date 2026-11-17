@@ -776,7 +776,8 @@ class MainActivity :
                 currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_DNS ||
                 currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_ENGINE ||
                 currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_HOTSPOT ||
-                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_AUTOMATION
+                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_AUTOMATION ||
+                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_DIAGNOSTICS
         val isSubScreen = isSettingsSubScreen || isToolsSubScreen || isConnectionsDetail || isProfileRoute || isA2MSubScreen
         // Get LogViewModel instance if we're on the Log screen
         val logViewModel: LogViewModel? =
@@ -979,6 +980,7 @@ class MainActivity :
                     NavHost(
                         navController = navController,
                         serviceStatus = currentServiceStatus,
+                        lastAlert = currentAlert?.let { (type, message) -> type.name to message },
                         showStartFab = showStartFab,
                         showStatusBar = showStatusBar,
                         newProfileArgs = newProfileArgs,
