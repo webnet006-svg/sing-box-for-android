@@ -2,6 +2,7 @@ package io.nekohasekai.sfa.compose.screen.am
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +22,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -60,13 +63,65 @@ fun A2MJournalScreen(
     val uiState by logViewModel.uiState.collectAsState()
     val scaffoldPadding = LocalScaffoldPadding.current
     val listState = rememberLazyListState()
+    // `isAtBottom` du ViewModel porte l'état « auto-scroll activé » (même logique que LogScreen).
+    val autoScrollEnabled by logViewModel.isAtBottom.collectAsState()
 
     LaunchedEffect(serviceStatus) {
         logViewModel.updateServiceStatus(serviceStatus)
     }
 
-    LaunchedEffect(uiState.logs.size) {
-        if (uiState.logs.isNotEmpty()) {
+    // Réactive l'auto-scroll quand l'utilisateur revient en bas de la liste.
+    val isAtBottom by remember {
+        derivedStateOf {
+            val layoutInfo = listState.layoutInfo
+            val lastVisibleItem = layoutInfo.visibleItemsInfo.lastOrNull()
+            lastVisibleItem != null && lastVisibleItem.index == layoutInfo.totalItemsCount - 1
+        }
+    }
+    LaunchedEffect(isAtBottom) {
+        if (isAtBottom) {
+            logViewModel.setAutoScrollEnabled(true)
+        }
+    }
+
+    // Désactive l'auto-scroll quand l'utilisateur remonte manuellement.
+    LaunchedEffect(listState) {
+        var dragStartIndex: Int? = null
+        var dragStartOffset: Int? = null
+
+        listState.interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is DragInteraction.Start -> {
+                    dragStartIndex = listState.firstVisibleItemIndex
+                    dragStartOffset = listState.firstVisibleItemScrollOffset
+                }
+                is DragInteraction.Stop, is DragInteraction.Cancel -> {
+                    if (dragStartIndex != null && dragStartOffset != null) {
+                        val currentIndex = listState.firstVisibleItemIndex
+                        val currentOffset = listState.firstVisibleItemScrollOffset
+
+                        val scrolledUp =
+                            if (dragStartIndex != currentIndex) {
+                                dragStartIndex!! > currentIndex
+                            } else {
+                                dragStartOffset!! > currentOffset
+                            }
+
+                        if (scrolledUp) {
+                            logViewModel.setAutoScrollEnabled(false)
+                        }
+
+                        dragStartIndex = null
+                        dragStartOffset = null
+                    }
+                }
+            }
+        }
+    }
+
+    // Suit le flux uniquement si l'auto-scroll est actif.
+    LaunchedEffect(uiState.logs.size, autoScrollEnabled) {
+        if (autoScrollEnabled && uiState.logs.isNotEmpty()) {
             listState.scrollToItem(uiState.logs.lastIndex)
         }
     }

@@ -123,6 +123,9 @@ fun A2MTUNHomeScreen(
             isRefreshingIp = true
             exitIp = fetchExitIp()
             isRefreshingIp = false
+        } else if (serviceStatus == Status.Stopped) {
+            // L'IP affichée n'est plus celle de sortie : on ne garde rien de périmé.
+            exitIp = null
         }
     }
 
