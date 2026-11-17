@@ -13,6 +13,10 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import io.nekohasekai.sfa.compose.screen.am.A2MJournalScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MAboutScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MAdvancedModesScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MAntiCensorshipScreen
+import io.nekohasekai.sfa.compose.screen.am.A2MAppearanceScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MRoutingScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MServersScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsConnectionScreen
@@ -221,6 +225,39 @@ fun NavHost(
 
         composable(A2MRoutes.SETTINGS_AUTOMATION) {
             A2MSettingsAutomationScreen(
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.SETTINGS_ANTI_CENSORSHIP) {
+            A2MAntiCensorshipScreen(
+                serviceStatus = serviceStatus,
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.SETTINGS_ADVANCED) {
+            A2MAdvancedModesScreen(
+                serviceStatus = serviceStatus,
+                onBack = { navController.popBackStack() },
+                onOpenEngine = { navController.navigate(A2MRoutes.SETTINGS_ENGINE) { launchSingleTop = true } },
+                onOpenHotspot = { navController.navigate(A2MRoutes.SETTINGS_HOTSPOT) { launchSingleTop = true } },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.SETTINGS_ABOUT) {
+            A2MAboutScreen(
+                serviceStatus = serviceStatus,
+                onBack = { navController.popBackStack() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        composable(A2MRoutes.APPEARANCE) {
+            A2MAppearanceScreen(
                 onBack = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
             )

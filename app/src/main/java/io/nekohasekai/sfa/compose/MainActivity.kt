@@ -17,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -239,6 +240,9 @@ class MainActivity :
             Settings.dataStore.initialize()
             connection.reconnect()
             RemoteControlManager.restore()
+
+            // Thème A2M : charge la palette/mode persistés avant la première composition.
+            io.nekohasekai.sfa.compose.screen.am.A2MThemeState.load()
 
             UpdateState.loadFromCache()
             if (Settings.checkUpdateEnabled) {
@@ -480,17 +484,23 @@ class MainActivity :
         val currentDestination = navBackStackEntry?.destination
         val currentRoute = currentDestination?.route
 
-        // Fond A2M clair : icônes de barre système sombres sur les routes A2M.
+        // Fond A2M : icônes de barre système adaptées au thème actif sur les routes A2M.
         val isA2MRoute = currentRoute?.startsWith(A2M_TUN_ROUTE_PREFIX) == true
+        val isA2MDark = io.nekohasekai.sfa.compose.screen.am.A2MThemeState.currentPalette().isDark
         if (isA2MRoute) {
             SideEffect {
                 window?.let { w ->
                     WindowCompat.getInsetsController(w, w.decorView).apply {
-                        isAppearanceLightStatusBars = true
-                        isAppearanceLightNavigationBars = true
+                        isAppearanceLightStatusBars = !isA2MDark
+                        isAppearanceLightNavigationBars = !isA2MDark
                     }
                 }
             }
+        }
+
+        // Mode « Système » : suit la configuration claire/sombre d'Android.
+        SideEffect {
+            io.nekohasekai.sfa.compose.screen.am.A2MThemeState.applySystemDark(isSystemInDarkTheme())
         }
 
         val scope = rememberCoroutineScope()
@@ -777,7 +787,11 @@ class MainActivity :
                 currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_ENGINE ||
                 currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_HOTSPOT ||
                 currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_AUTOMATION ||
-                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_DIAGNOSTICS
+            currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_DIAGNOSTICS ||
+                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_ANTI_CENSORSHIP ||
+                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_ADVANCED ||
+                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_ABOUT ||
+                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.APPEARANCE
         val isSubScreen = isSettingsSubScreen || isToolsSubScreen || isConnectionsDetail || isProfileRoute || isA2MSubScreen
         // Get LogViewModel instance if we're on the Log screen
         val logViewModel: LogViewModel? =

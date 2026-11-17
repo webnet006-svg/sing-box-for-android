@@ -20,6 +20,10 @@ object A2MRoutes {
     const val SETTINGS_HOTSPOT = "a2m/settings/hotspot"
     const val SETTINGS_AUTOMATION = "a2m/settings/automation"
     const val SETTINGS_DIAGNOSTICS = "a2m/settings/diagnostics"
+    const val SETTINGS_ANTI_CENSORSHIP = "a2m/settings/anti-censorship"
+    const val SETTINGS_ADVANCED = "a2m/settings/advanced"
+    const val SETTINGS_ABOUT = "a2m/settings/about"
+    const val APPEARANCE = "a2m/appearance"
 
     /** Préfixe commun, utilisé pour la barre de navigation A2M. */
     const val PREFIX = "a2m/"

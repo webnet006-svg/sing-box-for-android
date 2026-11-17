@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.RssFeed
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -131,7 +132,15 @@ fun A2MSettingsConnectionScreen(
 
     var dynamicNotification by remember { mutableStateOf(Settings.dynamicNotification) }
     var allowBypass by remember { mutableStateOf(Settings.allowBypass) }
-    var adBlockEnabled by remember { mutableStateOf(Settings.adBlockEnabled) }
+
+    // Options mémorisées dont l'effet moteur n'est pas encore raccordé.
+    var timeoutSec by remember { mutableStateOf(Settings.connectionTimeoutSec) }
+    var reconnectDelaySec by remember { mutableStateOf(Settings.reconnectDelaySec) }
+    var backgroundBehavior by remember { mutableStateOf(Settings.backgroundBehavior) }
+
+    var showTimeoutDialog by remember { mutableStateOf(false) }
+    var showDelayDialog by remember { mutableStateOf(false) }
+    var showBackgroundDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier =
@@ -139,24 +148,23 @@ fun A2MSettingsConnectionScreen(
             .fillMaxSize()
             .background(A2MColors.BackgroundBrush)
             .padding(scaffoldPadding),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
             A2MSubScreenHeader(
                 title = "Connexion",
-                subtitle = "Démarrage du tunnel et affichage système.",
+                subtitle = "Comportement du tunnel",
                 onBack = onBack,
             )
         }
 
-        item { SubSectionLabel("Notification") }
-
         item {
-            SubScreenCard {
-                SettingSwitch(
-                    title = "Notification dynamique",
-                    subtitle = "Affiche le débit et l'état du tunnel dans la notification",
+            A2MSettingsGroup(title = "Notifications", icon = Icons.Filled.Bolt) {
+                A2MSettingSwitchRow(
+                    icon = Icons.Filled.Bolt,
+                    title = "Vitesse dans la notification",
+                    subtitle = "Affiche le débit réel et l'état du tunnel dans la notification",
                     checked = dynamicNotification,
                     onCheckedChange = {
                         dynamicNotification = it
@@ -166,29 +174,46 @@ fun A2MSettingsConnectionScreen(
             }
         }
 
-        item { SubSectionLabel("Protection") }
-
         item {
-            SubScreenCard {
-                SettingSwitch(
-                    title = "Bloqueur de publicités",
-                    subtitle = "Bloque les domaines publicitaires connus (geosite ads-all) au niveau du routage. " +
-                        "Nécessite un redémarrage du tunnel.",
-                    checked = adBlockEnabled,
-                    onCheckedChange = {
-                        adBlockEnabled = it
-                        Settings.adBlockEnabled = it
-                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
-                    },
+            A2MSettingsGroup(title = "Reconnexion", icon = Icons.Filled.Shield) {
+                A2MSettingSwitchRow(
+                    icon = Icons.Filled.Shield,
+                    title = "Reconnexion automatique",
+                    subtitle = "Réessayer lorsque le tunnel tombe",
+                    checked = false,
+                    onCheckedChange = { /* Non raccordé : conservé pour l'effet réel à venir */ },
+                )
+                A2MDividerLine(inset = 14.dp)
+                A2MSettingRow(
+                    icon = Icons.Filled.Shield,
+                    title = "Timeout de connexion",
+                    value = "$timeoutSec s",
+                    iconTint = A2MColors.Accent,
+                    onClick = { showTimeoutDialog = true },
+                )
+                A2MDividerLine(inset = 14.dp)
+                A2MSettingRow(
+                    icon = Icons.Filled.Bolt,
+                    title = "Délai de reconnexion",
+                    value = "$reconnectDelaySec s",
+                    iconTint = A2MColors.Accent,
+                    onClick = { showDelayDialog = true },
                 )
             }
         }
 
-        item { SubSectionLabel("Système") }
-
         item {
-            SubScreenCard {
-                SettingSwitch(
+            A2MSettingsGroup(title = "Arrière-plan", icon = Icons.Filled.Shield) {
+                A2MSettingRow(
+                    icon = Icons.Filled.Shield,
+                    title = "Comportement en arrière-plan",
+                    value = backgroundBehaviorLabel(backgroundBehavior),
+                    iconTint = A2MColors.Accent,
+                    onClick = { showBackgroundDialog = true },
+                )
+                A2MDividerLine(inset = 14.dp)
+                A2MSettingSwitchRow(
+                    icon = Icons.Filled.Shield,
                     title = "Autoriser le contournement du VPN",
                     subtitle = "Autorise les applications à ignorer le tunnel (redémarrage requis)",
                     checked = allowBypass,
@@ -200,6 +225,58 @@ fun A2MSettingsConnectionScreen(
                 )
             }
         }
+
+        item {
+            A2MSettingsNotice(
+                "Ces préférences sont enregistrées. Le service VPN actuel reste actif en " +
+                    "arrière-plan. La reconnexion automatique, le timeout et le comportement " +
+                    "en arrière-plan sont mémorisés mais ne sont pas encore appliqués au " +
+                    "cycle de vie du tunnel : aucun effet n'est simulé. La notification " +
+                    "dynamique et le contournement VPN sont, eux, réellement appliqués.",
+            )
+        }
+    }
+
+    if (showTimeoutDialog) {
+        A2MChoiceDialog(
+            title = "Timeout de connexion",
+            options = timeoutChoices(),
+            selected = timeoutSec.toString(),
+            onDismiss = { showTimeoutDialog = false },
+            onSelect = { value ->
+                timeoutSec = value.toInt()
+                Settings.connectionTimeoutSec = value.toInt()
+                showTimeoutDialog = false
+            },
+        )
+    }
+
+    if (showDelayDialog) {
+        A2MChoiceDialog(
+            title = "Délai de reconnexion",
+            options = reconnectDelayChoices(),
+            selected = reconnectDelaySec.toString(),
+            onDismiss = { showDelayDialog = false },
+            onSelect = { value ->
+                reconnectDelaySec = value.toInt()
+                Settings.reconnectDelaySec = value.toInt()
+                showDelayDialog = false
+            },
+        )
+    }
+
+    if (showBackgroundDialog) {
+        A2MChoiceDialog(
+            title = "Comportement en arrière-plan",
+            options = backgroundBehaviorChoices(),
+            selected = backgroundBehavior,
+            onDismiss = { showBackgroundDialog = false },
+            onSelect = { value ->
+                backgroundBehavior = value
+                Settings.backgroundBehavior = value
+                showBackgroundDialog = false
+            },
+        )
     }
 }
 

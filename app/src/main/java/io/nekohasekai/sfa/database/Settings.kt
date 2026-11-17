@@ -70,6 +70,19 @@ object Settings {
     var dynamicNotification by dataStore.boolean(SettingsKey.DYNAMIC_NOTIFICATION) { true }
     var disableDeprecatedWarnings by dataStore.boolean(SettingsKey.DISABLE_DEPRECATED_WARNINGS) { false }
 
+    // ── Apparence (transplant ONFAA) : palette + mode, appliqués à toute l'UI ──
+    var themeKey by dataStore.string(SettingsKey.THEME_KEY) { "a2m" }
+    var themeMode by dataStore.string(SettingsKey.THEME_MODE) { "light" }
+
+    // ── Options persistées dont l'effet moteur n'est pas encore raccordé ──
+    // (notice d'honnêteté affichée dans l'interface ; aucun effet simulé).
+    var tlsFragment by dataStore.boolean(SettingsKey.TLS_FRAGMENT) { false }
+    var sniEnabled by dataStore.boolean(SettingsKey.SNI_ENABLED) { true }
+    var gamingMode by dataStore.boolean(SettingsKey.GAMING_MODE) { false }
+    var connectionTimeoutSec by dataStore.int(SettingsKey.CONNECTION_TIMEOUT_SEC) { 30 }
+    var reconnectDelaySec by dataStore.int(SettingsKey.RECONNECT_DELAY_SEC) { 5 }
+    var backgroundBehavior by dataStore.string(SettingsKey.BACKGROUND_BEHAVIOR) { "always" }
+
     const val PER_APP_PROXY_DISABLED = 0
     const val PER_APP_PROXY_EXCLUDE = 1
     const val PER_APP_PROXY_INCLUDE = 2

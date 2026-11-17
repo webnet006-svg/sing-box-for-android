@@ -28,6 +28,19 @@ object SettingsKey {
     const val AD_BLOCK_ENABLED = "ad_block_enabled"
     const val SYSTEM_PROXY_ENABLED = "system_proxy_enabled"
 
+    // Apparence (thèmes, façon ONFAA : palette + mode, appliqués à toute l'interface).
+    const val THEME_KEY = "theme_key"
+    const val THEME_MODE = "theme_mode"
+
+    // Options anti-censure et modes avancés : persistées et affichées, notice
+    // « non raccordé au moteur » tant que la décoration correspondante n'existe pas.
+    const val TLS_FRAGMENT = "tls_fragment"
+    const val SNI_ENABLED = "sni_enabled"
+    const val GAMING_MODE = "gaming_mode"
+    const val CONNECTION_TIMEOUT_SEC = "connection_timeout_sec"
+    const val RECONNECT_DELAY_SEC = "reconnect_delay_sec"
+    const val BACKGROUND_BEHAVIOR = "background_behavior"
+
     const val PRIVILEGE_SETTINGS_ENABLED = "hide_settings_enabled"
     const val PRIVILEGE_SETTINGS_LIST = "hide_settings_list"
     const val PRIVILEGE_SETTINGS_INTERFACE_RENAME_ENABLED = "hide_settings_interface_rename_enabled"

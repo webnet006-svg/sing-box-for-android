@@ -1,6 +1,9 @@
 package io.nekohasekai.sfa.compose.screen.am
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -8,28 +11,71 @@ import androidx.compose.ui.unit.dp
 /**
  * Design system A2M TUN, partagé entre tous les écrans.
  *
- * Style : interface VPN moderne sombre — quasi-noir bleuté, accent teal/menthe,
- * surfaces en dégradé subtil, bordures discrètes, grands chiffres de débit.
+ * Les couleurs sont pilotées par [A2MThemeState] : changer de palette ou de mode
+ * (clair/sombre) met à jour ces états et recolore instantanément tout l'arbre
+ * Compose, sans modifier les écrans. Les valeurs initiales = palette « a2m »
+ * claire (visuel de référence : fond menthe très pâle, cartes blanches, teal profond).
  */
 object A2MColors {
-    // Palette claire (visuel de référence : fond menthe très pâle, cartes blanches, teal profond)
-    val BackgroundTop = Color(0xFFDDF3EE)
-    val BackgroundMid = Color(0xFFF7FBFA)
-    val Accent = Color(0xFF0FA98F)
-    val Text = Color(0xFF0D2B33)
-    val Muted = Color(0xFF54787F)
-    val Faint = Color(0xFF93B3B8)
-    val CardBorder = Color(0xFFD8E8E5)
-    val CardBorderSelected = Color(0xFF0FA98F)
-    val AccentUpload = Color(0xFF7C5CFF)
-    val Danger = Color(0xFFE5484D)
-    val Amber = Color(0xFFD97706)
+    var BackgroundTop by mutableStateOf(Color(0xFFDDF3EE))
+        private set
+    var BackgroundMid by mutableStateOf(Color(0xFFF7FBFA))
+        private set
+    var Accent by mutableStateOf(Color(0xFF0FA98F))
+        private set
+    var Text by mutableStateOf(Color(0xFF0D2B33))
+        private set
+    var Muted by mutableStateOf(Color(0xFF54787F))
+        private set
+    var Faint by mutableStateOf(Color(0xFF93B3B8))
+        private set
+    var CardBorder by mutableStateOf(Color(0xFFD8E8E5))
+        private set
+    var CardBorderSelected by mutableStateOf(Color(0xFF0FA98F))
+        private set
+    var AccentUpload by mutableStateOf(Color(0xFF7C5CFF))
+        private set
+    var Danger by mutableStateOf(Color(0xFFE5484D))
+        private set
+    var Amber by mutableStateOf(Color(0xFFD97706))
+        private set
 
     /** Surface d'une tuile interne (icône, chip) légèrement plus sombre que la carte. */
-    val Tile = Color(0xFFE3F2EE)
+    var Tile by mutableStateOf(Color(0xFFE3F2EE))
+        private set
 
-    val BackgroundBrush = Brush.verticalGradient(listOf(BackgroundTop, BackgroundMid, BackgroundMid))
-    val CardBrush = Brush.linearGradient(listOf(Color.White, Color(0xFFF4FAF8)))
+    var BackgroundBrush by mutableStateOf(
+        Brush.verticalGradient(listOf(Color(0xFFDDF3EE), Color(0xFFF7FBFA), Color(0xFFF7FBFA))),
+    )
+        private set
+    var CardBrush by mutableStateOf(Brush.linearGradient(listOf(Color.White, Color(0xFFF4FAF8))))
+        private set
+
+    /** Couleurs de dégradé de carte courantes (utilisées par le catalogue de thèmes). */
+    var CardTop by mutableStateOf(Color.White)
+        private set
+    var CardBottom by mutableStateOf(Color(0xFFF4FAF8))
+        private set
+
+    /** Applique une palette complète (appelé uniquement par A2MThemeState). */
+    internal fun applyPalette(p: A2MPaletteTokens) {
+        BackgroundTop = p.backgroundTop
+        BackgroundMid = p.backgroundMid
+        Accent = p.accent
+        Text = p.text
+        Muted = p.textMuted
+        Faint = p.faint
+        CardBorder = p.border
+        CardBorderSelected = p.accent
+        AccentUpload = p.accentUpload
+        Danger = p.danger
+        Amber = p.amber
+        Tile = p.tile
+        CardTop = p.cardTop
+        CardBottom = p.cardBottom
+        BackgroundBrush = Brush.verticalGradient(listOf(p.backgroundTop, p.backgroundMid, p.backgroundMid))
+        CardBrush = Brush.linearGradient(listOf(p.cardTop, p.cardBottom))
+    }
 }
 
 /**
