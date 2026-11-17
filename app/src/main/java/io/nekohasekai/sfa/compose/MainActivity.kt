@@ -94,7 +94,6 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import dev.jeziellago.compose.markdowntext.MarkdownText
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.sfa.Application
 import io.nekohasekai.sfa.BuildConfig
@@ -113,7 +112,6 @@ import io.nekohasekai.sfa.compose.base.UiEvent
 import io.nekohasekai.sfa.compose.component.RemoteStatusBar
 import io.nekohasekai.sfa.compose.component.ServiceStatusBar
 import io.nekohasekai.sfa.compose.component.SnackbarHost
-import io.nekohasekai.sfa.compose.component.UpdateAvailableDialog
 import io.nekohasekai.sfa.compose.component.A2MNavigationBar
 import io.nekohasekai.sfa.compose.component.UptimeText
 import io.nekohasekai.sfa.compose.model.Connection
@@ -860,7 +858,10 @@ class MainActivity :
         }
 
         LaunchedEffect(allowedRoutes, currentRootRoute, useNavigationRail) {
-            if (currentRootRoute != null && !allowedRoutes.contains(currentRootRoute)) {
+            if (currentRootRoute != null &&
+                currentRootRoute?.startsWith(A2M_TUN_ROUTE_PREFIX) != true &&
+                !allowedRoutes.contains(currentRootRoute)
+            ) {
                 navController.navigate(Screen.Dashboard.route) {
                     popUpTo(navController.graph.findStartDestination().id) {
                         saveState = true
@@ -1093,7 +1094,8 @@ class MainActivity :
                             visible = !isRemote &&
                                 currentServiceStatus == Status.Stopped &&
                                 dashboardUiState.selectedProfileId != -1L &&
-                                !isSubScreen,
+                                !isSubScreen &&
+                                currentRoute?.startsWith(A2M_TUN_ROUTE_PREFIX) != true,
                             enter = scaleIn(),
                             exit = scaleOut(),
                             modifier = Modifier

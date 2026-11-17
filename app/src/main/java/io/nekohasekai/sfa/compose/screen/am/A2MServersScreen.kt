@@ -105,7 +105,9 @@ fun A2MServersScreen(
             when (val outcome = clipboardImporter.importText(text)) {
                 is ClipboardImporter.Outcome.Success -> {
                     importMessage = importSummary(outcome.result)
-                    subscriptionUrl = outcome.result.subscriptionUrl
+                    // Ne proposer l'abonnement que si aucun serveur n'a été extrait du texte.
+                    subscriptionUrl =
+                        outcome.result.subscriptionUrl.takeIf { outcome.result.profiles.isEmpty() }
                 }
                 is ClipboardImporter.Outcome.Error -> importMessage = outcome.message
             }
