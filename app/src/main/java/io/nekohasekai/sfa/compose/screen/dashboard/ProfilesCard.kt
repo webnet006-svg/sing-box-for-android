@@ -645,6 +645,51 @@ fun ProfilesCard(
         )
     }
 
+    fun handleQRScanText(value: String) {
+        coroutineScope.launch {
+            when (val parseResult = importHandler.parseQRCode(value)) {
+                is ProfileImportHandler.QRCodeParseResult.RemoteProfile -> {
+                    withContext(Dispatchers.Main) {
+                        onOpenNewProfile(
+                            NewProfileArgs(
+                                importName = parseResult.name,
+                                importUrl = parseResult.url,
+                            ),
+                        )
+                    }
+                }
+                is ProfileImportHandler.QRCodeParseResult.LocalProfile -> {
+                    when (val importResult = importHandler.importFromQRCode(value)) {
+                        is ProfileImportHandler.ImportResult.Success -> {
+                            withContext(Dispatchers.Main) {
+                                if (importResult.profiles.size == 1) {
+                                    onProfileEdit(importResult.profile)
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        importResult.summary
+                                            ?: "${importResult.profiles.size} serveurs importés",
+                                        Toast.LENGTH_LONG,
+                                    ).show()
+                                }
+                            }
+                        }
+                        is ProfileImportHandler.ImportResult.Error -> {
+                            withContext(Dispatchers.Main) {
+                                context.errorDialogBuilder(Exception(importResult.message)).show()
+                            }
+                        }
+                    }
+                }
+                is ProfileImportHandler.QRCodeParseResult.Error -> {
+                    withContext(Dispatchers.Main) {
+                        context.errorDialogBuilder(Exception(parseResult.message)).show()
+                    }
+                }
+            }
+        }
+    }
+
     if (showQRScanSheet) {
         QRScanSheet(
             onDismiss = { showQRScanSheet = false },
@@ -669,50 +714,8 @@ fun ProfilesCard(
                             }
                         }
                     }
-                    is QRScanResult.RemoteProfile -> {
-                        coroutineScope.launch {
-                            when (val parseResult = importHandler.parseQRCode(result.uri.toString())) {
-                                is ProfileImportHandler.QRCodeParseResult.RemoteProfile -> {
-                                    withContext(Dispatchers.Main) {
-                                        onOpenNewProfile(
-                                            NewProfileArgs(
-                                                importName = parseResult.name,
-                                                importUrl = parseResult.url,
-                                            ),
-                                        )
-                                    }
-                                }
-                                is ProfileImportHandler.QRCodeParseResult.LocalProfile -> {
-                                    when (val importResult = importHandler.importFromQRCode(result.uri.toString())) {
-                                        is ProfileImportHandler.ImportResult.Success -> {
-                                            withContext(Dispatchers.Main) {
-                                                if (importResult.profiles.size == 1) {
-                                                    onProfileEdit(importResult.profile)
-                                                } else {
-                                                    Toast.makeText(
-                                                        context,
-                                                        importResult.summary
-                                                            ?: "${importResult.profiles.size} serveurs importés",
-                                                        Toast.LENGTH_LONG,
-                                                    ).show()
-                                                }
-                                            }
-                                        }
-                                        is ProfileImportHandler.ImportResult.Error -> {
-                                            withContext(Dispatchers.Main) {
-                                                context.errorDialogBuilder(Exception(importResult.message)).show()
-                                            }
-                                        }
-                                    }
-                                }
-                                is ProfileImportHandler.QRCodeParseResult.Error -> {
-                                    withContext(Dispatchers.Main) {
-                                        context.errorDialogBuilder(Exception(parseResult.message)).show()
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    is QRScanResult.RemoteProfile -> handleQRScanText(result.uri.toString())
+                    is QRScanResult.TextProfile -> handleQRScanText(result.value)
                 }
             },
         )

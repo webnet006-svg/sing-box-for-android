@@ -8,12 +8,15 @@ import io.nekohasekai.libbox.ProfileContent
 import io.nekohasekai.sfa.R
 import io.nekohasekai.sfa.dams.importer.A2MExportFile
 import io.nekohasekai.sfa.dams.importer.ClipboardImporter
+import io.nekohasekai.sfa.dams.importer.Importer
+import io.nekohasekai.sfa.dams.importer.ShareExport
 import io.nekohasekai.sfa.database.Profile
 import io.nekohasekai.sfa.database.ProfileManager
 import io.nekohasekai.sfa.database.TypedProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.net.URLDecoder
 import java.util.Date
 
 class ProfileImportHandler(private val context: Context) {
@@ -137,6 +140,12 @@ class ProfileImportHandler(private val context: Context) {
                 }
             }
 
+            // Liens a2mtun://server/… et a2mtun://config/… générés par A2M TUN.
+            val tunnelText = decodeA2MTunnelText(data)
+            if (tunnelText != null) {
+                return@withContext parseTextProfile(tunnelText)
+            }
+
             // Check if it's a sing-box remote profile import link
             if (data.startsWith("sing-box://import-remote-profile")) {
                 try {
@@ -163,6 +172,10 @@ class ProfileImportHandler(private val context: Context) {
                 )
             }
 
+            // Liens de partage standard (ss://, vless://, vmess://, trojan://,
+            // hysteria2://, tuic://). Le parseur existant fait la validation.
+            parseShareLink(data)?.let { return@withContext it }
+
             // Try to decode as profile content
             val content =
                 try {
@@ -185,6 +198,12 @@ class ProfileImportHandler(private val context: Context) {
                 return@withContext importA2M(data)
             }
 
+            // Liens a2mtun://server/… et a2mtun://config/… générés par A2M TUN.
+            val tunnelText = decodeA2MTunnelText(data)
+            if (tunnelText != null) {
+                return@withContext importText(tunnelText)
+            }
+
             // Check if it's a sing-box remote profile import link
             if (data.startsWith("sing-box://import-remote-profile")) {
                 try {
@@ -203,6 +222,11 @@ class ProfileImportHandler(private val context: Context) {
                 val profileName = extractProfileNameFromUrl(data)
                 importRemoteProfile(profileName, data)
             } else {
+                // Liens de partage standard : réutilise l'import existant.
+                if (hasShareLink(data)) {
+                    return@withContext importText(data)
+                }
+
                 // Try to decode as profile content
                 val content =
                     try {
@@ -259,21 +283,15 @@ class ProfileImportHandler(private val context: Context) {
         if (decoded is A2MExportFile.Decoded.Error) {
             return ImportResult.Error("Fichier .a2m : ${decoded.message}")
         }
+        return importText(text)
+    }
 
+    /** Importe un lien de partage ou une configuration via le chemin existant. */
+    private suspend fun importText(text: String): ImportResult {
         return when (val outcome = ClipboardImporter(context).importText(text)) {
             is ClipboardImporter.Outcome.Success -> {
                 val imported = outcome.result
-                val summary =
-                    buildString {
-                        append("${imported.profiles.size} serveur(s) importé(s)")
-                        if (imported.skipped > 0) {
-                            append(", ${imported.skipped} doublon(s) ignoré(s)")
-                        }
-                        if (imported.failures.isNotEmpty()) {
-                            append(", ${imported.failures.size} échec(s)")
-                            imported.failures.firstOrNull()?.let { append(" : $it") }
-                        }
-                    }
+                val summary = importSummary(imported)
                 if (imported.profiles.isEmpty()) {
                     ImportResult.Error(summary)
                 } else {
@@ -283,6 +301,55 @@ class ProfileImportHandler(private val context: Context) {
             is ClipboardImporter.Outcome.Error -> ImportResult.Error(outcome.message)
         }
     }
+
+    private fun importSummary(imported: ClipboardImporter.Imported): String =
+        buildString {
+            append("${imported.profiles.size} serveur(s) importé(s)")
+            if (imported.skipped > 0) {
+                append(", ${imported.skipped} doublon(s) ignoré(s)")
+            }
+            if (imported.failures.isNotEmpty()) {
+                append(", ${imported.failures.size} échec(s)")
+                imported.failures.firstOrNull()?.let { append(" : $it") }
+            }
+        }
+
+    private fun decodeA2MTunnelText(data: String): String? {
+        val value = data.trim()
+        return when {
+            value.startsWith("a2mtun://config/") -> ShareExport.decodeCoded(value)
+            value.startsWith("a2mtun://server/") -> {
+                val encoded = value.removePrefix("a2mtun://server/")
+                runCatching { URLDecoder.decode(encoded, "UTF-8") }.getOrNull()
+            }
+            else -> null
+        }
+    }
+
+    private fun parseTextProfile(text: String): QRCodeParseResult {
+        val entries = Importer.parse(text)
+        val valid = entries.firstOrNull { it !is Importer.Entry.Invalid }
+            ?: return QRCodeParseResult.Error(
+                entries.filterIsInstance<Importer.Entry.Invalid>().firstOrNull()?.reason
+                    ?: "Contenu non reconnu",
+            )
+        val name = when (valid) {
+            is Importer.Entry.Link -> valid.profile.profileName
+            is Importer.Entry.Config -> valid.name.ifBlank { "Export A2M" }
+            is Importer.Entry.Subscription -> "Abonnement"
+            is Importer.Entry.Invalid -> "Import"
+        }
+        return QRCodeParseResult.LocalProfile(name = name)
+    }
+
+    private fun parseShareLink(text: String): QRCodeParseResult? =
+        Importer.parse(text)
+            .filterIsInstance<Importer.Entry.Link>()
+            .firstOrNull()
+            ?.let { QRCodeParseResult.LocalProfile(name = it.profile.profileName) }
+
+    private fun hasShareLink(text: String): Boolean =
+        Importer.parse(text).any { it is Importer.Entry.Link }
 
     private suspend fun importProfile(content: ProfileContent): ImportResult {
         val typedProfile = TypedProfile()
