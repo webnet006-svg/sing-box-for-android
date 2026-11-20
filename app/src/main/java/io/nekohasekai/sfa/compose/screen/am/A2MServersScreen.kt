@@ -232,11 +232,11 @@ fun A2MServersScreen(
     suspend fun tcpResult(profile: Profile): Pair<String, Long?> {
         val target = withContext(Dispatchers.IO) { A2MProfileInfo.serverAddressAndPort(profile) }
         return if (target == null) {
-            "Adresse inconnue" to null
+            "Adresse inconnue" to (null as Long?)
         } else {
             when (val ms = A2MProfileInfo.tcpPing(target.first, target.second)) {
-                null -> "Échec" to null
-                else -> "TCP $ms ms" to ms
+                null -> "Échec" to (null as Long?)
+                else -> "TCP $ms ms" to ms.toLong()
             }
         }
     }
