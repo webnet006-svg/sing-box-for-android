@@ -171,6 +171,10 @@ object Settings {
     var dashboardItemOrder by dataStore.string(SettingsKey.DASHBOARD_ITEM_ORDER) { "" }
     var dashboardDisabledItems by dataStore.stringSet(SettingsKey.DASHBOARD_DISABLED_ITEMS) { emptySet() }
 
+    var serversSort by dataStore.string(SettingsKey.SERVERS_SORT) { "name" }
+    var serversView by dataStore.string(SettingsKey.SERVERS_VIEW) { "list" }
+    var serversSize by dataStore.string(SettingsKey.SERVERS_SIZE) { "m" }
+
     var activeRemoteServerId by dataStore.long(SettingsKey.ACTIVE_REMOTE_SERVER_ID) { 0L }
 
     // Tailscale SSH

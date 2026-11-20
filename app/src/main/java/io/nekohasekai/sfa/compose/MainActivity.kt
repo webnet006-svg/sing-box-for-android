@@ -344,7 +344,7 @@ class MainActivity :
                                 pendingNavigationRoute.value = "a2m/servers"
                                 android.widget.Toast.makeText(
                                     this@MainActivity,
-                                    "Serveur importé : ${result.profile.name}",
+                                    result.summary ?: "Serveur importé : ${result.profile.name}",
                                     android.widget.Toast.LENGTH_SHORT,
                                 ).show()
                             }
@@ -760,8 +760,14 @@ class MainActivity :
                         scope.launch {
                             when (val result = importHandler.importFromUri(importUri)) {
                                 is ProfileImportHandler.ImportResult.Success -> {
-                                    navController.navigate(ProfileRoutes.editProfile(result.profile.id)) {
-                                        launchSingleTop = true
+                                    if (result.profiles.size == 1) {
+                                        navController.navigate(ProfileRoutes.editProfile(result.profile.id)) {
+                                            launchSingleTop = true
+                                        }
+                                    } else {
+                                        navController.navigate("a2m/servers") {
+                                            launchSingleTop = true
+                                        }
                                     }
                                 }
                                 is ProfileImportHandler.ImportResult.Error -> {

@@ -3,6 +3,7 @@ package io.nekohasekai.sfa.compose.screen.am
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -40,8 +41,10 @@ import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NetworkCheck
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.AlertDialog
@@ -76,12 +79,16 @@ import io.nekohasekai.sfa.bg.UpdateProfileWork
 import io.nekohasekai.sfa.compose.screen.configuration.ProfileImportHandler
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardViewModel
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
+import io.nekohasekai.sfa.dams.importer.A2MExportFile
 import io.nekohasekai.sfa.dams.importer.ClipboardImporter
 import io.nekohasekai.sfa.dams.importer.ShareExport
 import io.nekohasekai.sfa.database.Profile
 import io.nekohasekai.sfa.database.ProfileManager
+import io.nekohasekai.sfa.database.Settings
 import io.nekohasekai.sfa.database.TypedProfile
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -123,13 +130,14 @@ fun A2MServersScreen(
     var addresses by remember { mutableStateOf<Map<Long, String?>>(emptyMap()) }
     var searchQuery by remember { mutableStateOf("") }
     var protocolFilter by remember { mutableStateOf<String?>(null) }
-    var sort by remember { mutableStateOf(ServerSort.NAME) }
-    var viewMode by remember { mutableStateOf(ServerViewMode.LIST) }
-    var serverSize by remember { mutableStateOf(ServerSize.MEDIUM) }
+    var sort by remember { mutableStateOf(ServerSort.fromKey(Settings.serversSort)) }
+    var viewMode by remember { mutableStateOf(ServerViewMode.fromKey(Settings.serversView)) }
+    var serverSize by remember { mutableStateOf(ServerSize.fromKey(Settings.serversSize)) }
     var selectionMode by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var contextTarget by remember { mutableStateOf<Profile?>(null) }
     var testResults by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    var testLatencies by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
     var testingIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
     var testAllJob by remember { mutableStateOf<Job?>(null) }
     var testAllRunning by remember { mutableStateOf(false) }
@@ -141,6 +149,8 @@ fun A2MServersScreen(
     var showImportSheet by remember { mutableStateOf(false) }
     var showLinkDialog by remember { mutableStateOf(false) }
     var exportTarget by remember { mutableStateOf<Pair<Profile, String>?>(null) }
+    var a2mExportTargets by remember { mutableStateOf<List<Profile>>(emptyList()) }
+    var a2mExportCoded by remember { mutableStateOf(false) }
     var linkText by remember { mutableStateOf("") }
     var importMessage by remember { mutableStateOf<String?>(null) }
     var subscriptionUrl by remember { mutableStateOf<String?>(null) }
@@ -162,6 +172,8 @@ fun A2MServersScreen(
         val ids = profiles.map { it.id }.toSet()
         selectedIds = selectedIds.intersect(ids)
         if (selectedIds.isEmpty()) selectionMode = false
+        testResults = testResults.filterKeys { it in ids }
+        testLatencies = testLatencies.filterKeys { it in ids }
     }
 
     val protocolOptions =
@@ -217,23 +229,35 @@ fun A2MServersScreen(
      * réels de la configuration ; la durée d'établissement (résolution DNS
      * incluse) est affichée. Échec honnête si la connexion ne s'établit pas.
      */
-    suspend fun tcpResult(profile: Profile): String {
+    suspend fun tcpResult(profile: Profile): Pair<String, Long?> {
         val target = withContext(Dispatchers.IO) { A2MProfileInfo.serverAddressAndPort(profile) }
         return if (target == null) {
-            "Adresse inconnue"
+            "Adresse inconnue" to null
         } else {
             when (val ms = A2MProfileInfo.tcpPing(target.first, target.second)) {
-                null -> "Échec"
-                else -> "TCP $ms ms"
+                null -> "Échec" to null
+                else -> "TCP $ms ms" to ms
             }
         }
+    }
+
+    fun applyTestResult(
+        profile: Profile,
+        result: Pair<String, Long?>,
+    ) {
+        testResults = testResults + (profile.id to result.first)
+        testLatencies =
+            if (result.second != null) {
+                testLatencies + (profile.id to result.second!!)
+            } else {
+                testLatencies - profile.id
+            }
     }
 
     fun testProfile(profile: Profile) {
         coroutineScope.launch {
             testingIds = testingIds + profile.id
-            val result = tcpResult(profile)
-            testResults = testResults + (profile.id to result)
+            applyTestResult(profile, tcpResult(profile))
             testingIds = testingIds - profile.id
         }
     }
@@ -249,8 +273,7 @@ fun A2MServersScreen(
                     for (profile in targets) {
                         if (!isActive) break
                         testingIds = testingIds + profile.id
-                        val result = tcpResult(profile)
-                        testResults = testResults + (profile.id to result)
+                        applyTestResult(profile, tcpResult(profile))
                         testingIds = testingIds - profile.id
                         testAllDone++
                     }
@@ -268,7 +291,7 @@ fun A2MServersScreen(
         testAllRunning = false
     }
 
-    /** Ouvre la feuille d'export (liens partageables, QR) d'un profil local. */
+    /** Ouvre la feuille d'export (liens, QR, .a2m, config brute) d'un profil. */
     fun openExport(profile: Profile) {
         coroutineScope.launch {
             val text =
@@ -368,7 +391,12 @@ fun A2MServersScreen(
                     isImporting = true
                     when (val result = importHandler.importFromUri(uri)) {
                         is ProfileImportHandler.ImportResult.Success ->
-                            importMessage = "Serveur importé : ${result.profile.name}"
+                            importMessage =
+                                result.summary ?: if (result.profiles.size == 1) {
+                                    "Serveur importé : ${result.profile.name}"
+                                } else {
+                                    "${result.profiles.size} serveurs importés"
+                                }
                         is ProfileImportHandler.ImportResult.Error ->
                             importMessage = "Import impossible : ${result.message}"
                     }
@@ -377,10 +405,105 @@ fun A2MServersScreen(
             }
         }
 
+    val a2mFileLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument(A2MExportFile.MIME_TYPE),
+        ) { uri ->
+            val targets = a2mExportTargets
+            val coded = a2mExportCoded
+            a2mExportTargets = emptyList()
+            if (uri != null && targets.isNotEmpty()) {
+                val destination = uri
+                coroutineScope.launch {
+                    val outcome =
+                        runCatching {
+                            val text =
+                                withContext(Dispatchers.IO) {
+                                    val entries =
+                                        targets.mapNotNull { profile ->
+                                            val config =
+                                                runCatching { File(profile.typed.path).readText() }
+                                                    .getOrNull()
+                                                    ?.takeIf { it.isNotBlank() }
+                                                    ?: return@mapNotNull null
+                                            A2MExportFile.Entry(profile.name, config)
+                                        }
+                                    if (entries.isEmpty()) {
+                                        error("Aucune configuration à exporter.")
+                                    }
+                                    if (coded) {
+                                        A2MExportFile.encodeCoded(entries)
+                                    } else {
+                                        A2MExportFile.encodeSimple(entries)
+                                    }
+                                }
+                            withContext(Dispatchers.IO) {
+                                context.contentResolver.openOutputStream(destination)?.use {
+                                    it.write(text.toByteArray(Charsets.UTF_8))
+                                } ?: error("Impossible d'ouvrir le fichier de destination.")
+                            }
+                        }
+                    Toast.makeText(
+                        context,
+                        if (outcome.isSuccess) {
+                            "Fichier .a2m enregistré."
+                        } else {
+                            "Échec de l'export : ${outcome.exceptionOrNull()?.message.orEmpty()}"
+                        },
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+        }
+
     fun select(profile: Profile) {
         if (profile.id != uiState.selectedProfileId) {
             dashboardViewModel.selectProfile(profile.id)
         }
+    }
+
+    /**
+     * Sélectionne le meilleur résultat TCP déjà conservé. Ne lance jamais la
+     * connexion VPN : [DashboardViewModel.selectProfile] ne fait que choisir
+     * le profil (et recharge le service s'il tourne déjà).
+     */
+    fun selectFastest() {
+        val fastest = fastestProfileId(testLatencies)
+        if (fastest == null) {
+            Toast.makeText(
+                context,
+                "Testez d'abord les serveurs avec « Tester tout ».",
+                Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        val profile = uiState.profiles.firstOrNull { it.id == fastest }
+        if (profile == null) {
+            Toast.makeText(context, "Le serveur le plus rapide n'existe plus.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (profile.id != uiState.selectedProfileId) {
+            dashboardViewModel.selectProfile(profile.id)
+        }
+        Toast.makeText(
+            context,
+            "Plus rapide : ${profile.name} (${testLatencies[fastest]} ms)",
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+
+    fun exportA2M(
+        targets: List<Profile>,
+        coded: Boolean,
+    ) {
+        if (targets.isEmpty()) {
+            Toast.makeText(context, "Aucun serveur sélectionné.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        a2mExportTargets = targets
+        a2mExportCoded = coded
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date())
+        a2mFileLauncher.launch("a2m-servers-$stamp.a2m")
     }
 
     val query = searchQuery.trim()
@@ -547,6 +670,18 @@ fun A2MServersScreen(
                                     onClick = { exportProfiles(selectedProfiles) },
                                 )
                                 A2MServerActionChip(
+                                    label = "A2M simple",
+                                    icon = Icons.Filled.Save,
+                                    enabled = selectedProfiles.isNotEmpty(),
+                                    onClick = { exportA2M(selectedProfiles, coded = false) },
+                                )
+                                A2MServerActionChip(
+                                    label = "A2M codé",
+                                    icon = Icons.Filled.Save,
+                                    enabled = selectedProfiles.isNotEmpty(),
+                                    onClick = { exportA2M(selectedProfiles, coded = true) },
+                                )
+                                A2MServerActionChip(
                                     label = "Supprimer",
                                     icon = Icons.Filled.Delete,
                                     danger = true,
@@ -586,6 +721,11 @@ fun A2MServersScreen(
                             },
                         )
                         A2MServerActionChip(
+                            label = "Sélectionner le plus rapide",
+                            icon = Icons.Filled.Speed,
+                            onClick = { selectFastest() },
+                        )
+                        A2MServerActionChip(
                             label = "Tri : ${sort.label}",
                             onClick = { showSortDialog = true },
                         )
@@ -595,7 +735,11 @@ fun A2MServersScreen(
                         )
                         A2MServerActionChip(
                             label = "Taille : ${serverSize.label}",
-                            onClick = { serverSize = serverSize.next() },
+                            onClick = {
+                                val next = serverSize.next()
+                                serverSize = next
+                                Settings.serversSize = next.key
+                            },
                         )
                     }
                 }
@@ -784,7 +928,7 @@ fun A2MServersScreen(
                 ImportOption(
                     icon = Icons.Filled.Description,
                     title = "Depuis un fichier",
-                    subtitle = "Configuration sing-box (.json)",
+                    subtitle = "Configuration sing-box (.json) ou export .a2m",
                     onClick = {
                         showImportSheet = false
                         fileLauncher.launch("*/*")
@@ -993,16 +1137,23 @@ fun A2MServersScreen(
                 ImportOption(
                     icon = Icons.Filled.Share,
                     title = "Partager / exporter",
-                    subtitle = "Lien, QR ou configuration",
+                    subtitle = "Lien, QR, fichier .a2m ou configuration brute",
                     onClick = {
                         contextTarget = null
-                        if (profile.typed.type == TypedProfile.Type.Local) {
-                            openExport(profile)
-                        } else {
-                            shareProfile(profile)
-                        }
+                        openExport(profile)
                     },
                 )
+                if (profile.typed.type == TypedProfile.Type.Remote) {
+                    ImportOption(
+                        icon = Icons.Filled.Link,
+                        title = "Partager l'URL d'abonnement",
+                        subtitle = "Conserver le partage brut de l'abonnement distant",
+                        onClick = {
+                            contextTarget = null
+                            shareProfile(profile)
+                        },
+                    )
+                }
                 ImportOption(
                     icon = Icons.Filled.CheckCircle,
                     title = "Sélectionner",
@@ -1036,6 +1187,7 @@ fun A2MServersScreen(
                         TextButton(
                             onClick = {
                                 sort = option
+                                Settings.serversSort = option.key
                                 showSortDialog = false
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -1067,6 +1219,7 @@ fun A2MServersScreen(
                         TextButton(
                             onClick = {
                                 viewMode = option
+                                Settings.serversView = option.key
                                 showViewDialog = false
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -1148,25 +1301,51 @@ fun A2MServersScreen(
     }
 }
 
-private enum class ServerViewMode(val label: String) {
-    LIST("Liste"),
-    GRID("Grille"),
-    TABLE("Tableau"),
+private enum class ServerViewMode(
+    val key: String,
+    val label: String,
+) {
+    LIST("list", "Liste"),
+    GRID("grid", "Grille"),
+    TABLE("table", "Tableau"),
+    ;
+
+    companion object {
+        fun fromKey(key: String): ServerViewMode =
+            entries.firstOrNull { it.key == key } ?: LIST
+    }
 }
 
-private enum class ServerSize(val label: String) {
-    SMALL("S"),
-    MEDIUM("M"),
-    LARGE("L"),
+private enum class ServerSize(
+    val key: String,
+    val label: String,
+) {
+    SMALL("s", "S"),
+    MEDIUM("m", "M"),
+    LARGE("l", "L"),
     ;
 
     fun next(): ServerSize = entries[(ordinal + 1) % entries.size]
+
+    companion object {
+        fun fromKey(key: String): ServerSize =
+            entries.firstOrNull { it.key == key } ?: MEDIUM
+    }
 }
 
-private enum class ServerSort(val label: String) {
-    NAME("Nom"),
-    PROTOCOL("Protocole"),
-    STATUS("Statut"),
+private enum class ServerSort(
+    val key: String,
+    val label: String,
+) {
+    NAME("name", "Nom"),
+    PROTOCOL("protocol", "Protocole"),
+    STATUS("status", "Statut"),
+    ;
+
+    companion object {
+        fun fromKey(key: String): ServerSort =
+            entries.firstOrNull { it.key == key } ?: NAME
+    }
 }
 
 private fun importSummary(result: ClipboardImporter.Imported): String =

@@ -162,12 +162,12 @@ class ShareActivity :
         val stream = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
         if (stream != null) {
             val handler = ProfileImportHandler(this)
-            when (handler.parseUri(stream)) {
+            when (val parsed = handler.parseUri(stream)) {
                 is ProfileImportHandler.UriParseResult.Success -> {
                     val message =
                         when (val outcome = handler.importFromUri(stream)) {
                             is ProfileImportHandler.ImportResult.Success ->
-                                "Serveur importé : ${outcome.profile.name}"
+                                outcome.summary ?: "Serveur importé : ${outcome.profile.name}"
                             is ProfileImportHandler.ImportResult.Error -> outcome.message
                         }
                     withContext(Dispatchers.Main) {
@@ -180,7 +180,12 @@ class ShareActivity :
                     }
                     return true
                 }
-                is ProfileImportHandler.UriParseResult.Error -> return false
+                is ProfileImportHandler.UriParseResult.Error -> {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@ShareActivity, parsed.message, Toast.LENGTH_LONG).show()
+                    }
+                    return true
+                }
             }
         }
         return false

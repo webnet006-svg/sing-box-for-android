@@ -1,6 +1,9 @@
 package io.nekohasekai.sfa.compose.screen.am
 
 import android.graphics.Bitmap
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,6 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,11 +47,13 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import io.nekohasekai.sfa.dams.importer.A2MExportFile
 import io.nekohasekai.sfa.dams.importer.ShareExport
 
 /**
  * Feuille d'export d'un serveur : lien de partage standard, liens
- * `a2mtun://` simple et codé, QR code et partage système.
+ * `a2mtun://` simple et codé, fichiers `.a2m` simple/codé, QR code et
+ * partage système (lien ou configuration brute).
  *
  * Les textes affichés masquent les secrets ; les liens copiés et les QR
  * contiennent les vraies valeurs, nécessaires à l'import.
@@ -64,6 +70,47 @@ fun A2MExportSheet(
     var qr by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val exported = remember(config, profileName) { ShareExport.export(config, profileName) }
+    var pendingFileCoded by remember { mutableStateOf<Boolean?>(null) }
+    val safeFileName =
+        remember(profileName) {
+            profileName
+                .replace(Regex("""[\\/:*?"<>|]+"""), "_")
+                .trim()
+                .take(48)
+                .ifBlank { "serveur" }
+        }
+    val fileLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument(A2MExportFile.MIME_TYPE),
+        ) { uri ->
+            val coded = pendingFileCoded
+            pendingFileCoded = null
+            if (uri != null && coded != null) {
+                val destination = uri
+                val outcome =
+                    runCatching {
+                        val entry = A2MExportFile.Entry(profileName, config)
+                        val text =
+                            if (coded) {
+                                A2MExportFile.encodeCoded(listOf(entry))
+                            } else {
+                                A2MExportFile.encodeSimple(listOf(entry))
+                            }
+                        context.contentResolver.openOutputStream(destination)?.use {
+                            it.write(text.toByteArray(Charsets.UTF_8))
+                        } ?: error("Impossible d'ouvrir le fichier de destination.")
+                    }
+                Toast.makeText(
+                    context,
+                    if (outcome.isSuccess) {
+                        "Fichier .a2m enregistré."
+                    } else {
+                        "Échec de l'enregistrement : ${outcome.exceptionOrNull()?.message.orEmpty()}"
+                    },
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -89,8 +136,8 @@ fun A2MExportSheet(
             if (exported == null) {
                 Text(
                     text =
-                        "Ce profil n'utilise pas un protocole exportable en lien " +
-                            "(vless, vmess ou trojan). Vous pouvez partager sa configuration brute.",
+                        "Ce profil n'a pas de lien de partage standard pris en charge. " +
+                            "Vous pouvez exporter sa configuration brute ou un fichier .a2m.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = A2MColors.Muted,
                 )
@@ -109,22 +156,66 @@ fun A2MExportSheet(
                 )
                 A2MExportRow(
                     title = "Lien A2mtun:// codé",
-                    subtitle = "Configuration complète compressée (base64url + gzip)",
+                    subtitle = "Configuration complète compressée (GZIP + base64url, sans chiffrement)",
                     onCopy = { clipboard.setText(AnnotatedString(exported.codedLink)) },
                     onQr = { qr = "A2mtun:// codé" to exported.codedLink },
                 )
             }
 
+            A2MFileExportRow(
+                title = "Fichier .a2m simple",
+                subtitle = "JSON lisible, avec empreinte SHA-256",
+                onClick = {
+                    pendingFileCoded = false
+                    fileLauncher.launch("$safeFileName.a2m")
+                },
+            )
+            A2MFileExportRow(
+                title = "Fichier .a2m codé",
+                subtitle = "GZIP + base64url, avec empreinte SHA-256 (sans chiffrement)",
+                onClick = {
+                    pendingFileCoded = true
+                    fileLauncher.launch("$safeFileName.a2m")
+                },
+            )
+
+            if (exported != null) {
+                TextButton(
+                    onClick = {
+                        val send =
+                            android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(android.content.Intent.EXTRA_TEXT, exported.shareUri)
+                            }
+                        context.startActivity(
+                            android.content.Intent.createChooser(
+                                send,
+                                "Partager le lien de « $profileName »",
+                            ),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Share,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(text = "  Partager le lien")
+                }
+            }
             TextButton(
                 onClick = {
-                    val payload = exported?.shareUri ?: config
                     val send =
                         android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                             type = "text/plain"
-                            putExtra(android.content.Intent.EXTRA_TEXT, payload)
+                            putExtra(android.content.Intent.EXTRA_TEXT, config)
                         }
                     context.startActivity(
-                        android.content.Intent.createChooser(send, "Partager « $profileName »"),
+                        android.content.Intent.createChooser(
+                            send,
+                            "Partager la configuration brute de « $profileName »",
+                        ),
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -134,9 +225,17 @@ fun A2MExportSheet(
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
                 )
-                Text(text = "  Partager via une autre application")
+                Text(text = "  Partager la configuration brute")
             }
 
+            Text(
+                text =
+                    "Le fichier .a2m codé est compressé (GZIP) puis encodé (base64url), " +
+                        "sans chiffrement. L'empreinte SHA-256 vérifie l'intégrité du fichier, " +
+                        "pas son origine.",
+                style = MaterialTheme.typography.bodySmall,
+                color = A2MColors.Faint,
+            )
             Text(
                 text =
                     "Les liens contiennent les identifiants du serveur : ne les " +
@@ -231,6 +330,51 @@ private fun A2MExportRow(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun A2MFileExportRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier =
+        Modifier
+            .fillMaxWidth()
+            .clip(A2MShapes.tile)
+            .background(A2MColors.CardBrush)
+            .border(1.dp, A2MColors.CardBorder, A2MShapes.tile)
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Save,
+            contentDescription = null,
+            tint = A2MColors.Accent,
+            modifier = Modifier.size(20.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = A2MColors.Text,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = A2MColors.Muted,
+            )
+        }
+        Text(
+            text = "Enregistrer",
+            style = MaterialTheme.typography.labelLarge,
+            color = A2MColors.Accent,
+        )
     }
 }
 

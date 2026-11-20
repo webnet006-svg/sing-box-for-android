@@ -1,6 +1,7 @@
 package io.nekohasekai.sfa.dams.importer
 
 import java.net.URLDecoder
+import kotlin.io.encoding.Base64
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -106,6 +107,83 @@ class ShareExportTest {
         assertFalse(maskedShare.contains("11111111-2222-3333-4444-555555555555"))
         assertTrue(maskedShare.contains("exemple.com"))
         assertEquals("a2mtun://config/••••••", ShareExport.maskSensitive(exported.codedLink))
+    }
+
+    @Test
+    fun exportsShadowsocksSip002RoundTrippable() {
+        val credentials = Base64.UrlSafe.encode("aes-256-gcm:secret".toByteArray())
+        val link =
+            "ss://$credentials@ss.example.com:8388" +
+                "?plugin=obfs-local%3Bobfs%3Dhttp%3Bobfs-host%3Dbing.com#SS"
+        val config = Importer.buildConfig(linkOf(link))
+        val exported = ShareExport.export(config, "SS")!!
+        assertEquals("SS", exported.protocolLabel)
+        assertTrue(exported.shareUri.startsWith("ss://"))
+
+        val parsed = linkOf(exported.shareUri)
+        assertEquals(Importer.Protocol.SHADOWSOCKS, parsed.protocol)
+        assertEquals("ss.example.com", parsed.host)
+        assertEquals(8388, parsed.port)
+        assertEquals(
+            "aes-256-gcm",
+            (parsed.outbound["method"] as kotlinx.serialization.json.JsonPrimitive).content,
+        )
+        assertEquals(
+            "secret",
+            (parsed.outbound["password"] as kotlinx.serialization.json.JsonPrimitive).content,
+        )
+        assertEquals(
+            "obfs-local",
+            (parsed.outbound["plugin"] as kotlinx.serialization.json.JsonPrimitive).content,
+        )
+        assertEquals(
+            "obfs=http;obfs-host=bing.com",
+            (parsed.outbound["plugin_opts"] as kotlinx.serialization.json.JsonPrimitive).content,
+        )
+    }
+
+    @Test
+    fun exportsHysteria2RoundTrippable() {
+        val link =
+            "hy2://password@hy.example.com:443?sni=hy.example.com&insecure=1" +
+                "&obfs=salamander&obfs-password=secret#HY"
+        val config = Importer.buildConfig(linkOf(link))
+        val exported = ShareExport.export(config, "HY")!!
+        assertEquals("Hysteria2", exported.protocolLabel)
+        assertTrue(exported.shareUri.startsWith("hysteria2://"))
+
+        val parsed = linkOf(exported.shareUri)
+        assertEquals(Importer.Protocol.HYSTERIA2, parsed.protocol)
+        assertEquals("hy.example.com", parsed.host)
+        assertEquals(443, parsed.port)
+        assertEquals(
+            "password",
+            (parsed.outbound["password"] as kotlinx.serialization.json.JsonPrimitive).content,
+        )
+    }
+
+    @Test
+    fun exportsTuicRoundTrippable() {
+        val link =
+            "tuic://11111111-2222-3333-4444-555555555555:secret@tu.example.com:443" +
+                "?congestion_control=bbr&udp_relay_mode=native&sni=tu.example.com&allow_insecure=1#TUIC"
+        val config = Importer.buildConfig(linkOf(link))
+        val exported = ShareExport.export(config, "TUIC")!!
+        assertEquals("TUIC", exported.protocolLabel)
+        assertTrue(exported.shareUri.startsWith("tuic://"))
+
+        val parsed = linkOf(exported.shareUri)
+        assertEquals(Importer.Protocol.TUIC, parsed.protocol)
+        assertEquals("tu.example.com", parsed.host)
+        assertEquals(443, parsed.port)
+        assertEquals(
+            "11111111-2222-3333-4444-555555555555",
+            (parsed.outbound["uuid"] as kotlinx.serialization.json.JsonPrimitive).content,
+        )
+        assertEquals(
+            "secret",
+            (parsed.outbound["password"] as kotlinx.serialization.json.JsonPrimitive).content,
+        )
     }
 
     @Test

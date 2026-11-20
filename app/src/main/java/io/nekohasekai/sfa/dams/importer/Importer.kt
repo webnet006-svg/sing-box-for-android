@@ -78,6 +78,23 @@ object Importer {
     private class ImportFailure(message: String) : Exception(message)
 
     fun parse(text: String): List<Entry> {
+        // Un fichier .a2m est du JSON, mais ce n'est pas une configuration
+        // sing-box. On le décode avant la normalisation pour ne pas altérer
+        // les chaînes qu'il contient et pour vérifier son empreinte.
+        if (A2MExportFile.isA2M(text)) {
+            return when (val decoded = A2MExportFile.decode(text)) {
+                is A2MExportFile.Decoded.Success ->
+                    decoded.entries.map { entry ->
+                        Entry.Config(
+                            name = entry.name,
+                            content = entry.config,
+                            dedupKey = dedupKeyOfConfig(entry.config),
+                        )
+                    }
+                is A2MExportFile.Decoded.Error ->
+                    listOf(Entry.Invalid("fichier .a2m : ${decoded.message}"))
+            }
+        }
         val normalized = normalize(text)
         if (normalized.isBlank()) {
             return listOf(Entry.Invalid("empty content"))

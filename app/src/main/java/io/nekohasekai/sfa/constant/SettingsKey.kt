@@ -74,6 +74,11 @@ object SettingsKey {
     const val DASHBOARD_ITEM_ORDER = "dashboard_item_order"
     const val DASHBOARD_DISABLED_ITEMS = "dashboard_disabled_items"
 
+    // Organisation durable de l'écran Serveurs.
+    const val SERVERS_SORT = "servers_sort"
+    const val SERVERS_VIEW = "servers_view"
+    const val SERVERS_SIZE = "servers_size"
+
     // Remote Control
     const val ACTIVE_REMOTE_SERVER_ID = "active_remote_server_id"
 

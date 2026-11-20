@@ -605,7 +605,16 @@ fun ProfilesCard(
                                 when (val result = importHandler.importFromUri(importUri)) {
                                     is ProfileImportHandler.ImportResult.Success -> {
                                         withContext(Dispatchers.Main) {
-                                            onProfileEdit(result.profile)
+                                            if (result.profiles.size == 1) {
+                                                onProfileEdit(result.profile)
+                                            } else {
+                                                Toast.makeText(
+                                                    context,
+                                                    result.summary
+                                                        ?: "${result.profiles.size} serveurs importés",
+                                                    Toast.LENGTH_LONG,
+                                                ).show()
+                                            }
                                         }
                                     }
                                     is ProfileImportHandler.ImportResult.Error -> {
@@ -677,7 +686,16 @@ fun ProfilesCard(
                                     when (val importResult = importHandler.importFromQRCode(result.uri.toString())) {
                                         is ProfileImportHandler.ImportResult.Success -> {
                                             withContext(Dispatchers.Main) {
-                                                onProfileEdit(importResult.profile)
+                                                if (importResult.profiles.size == 1) {
+                                                    onProfileEdit(importResult.profile)
+                                                } else {
+                                                    Toast.makeText(
+                                                        context,
+                                                        importResult.summary
+                                                            ?: "${importResult.profiles.size} serveurs importés",
+                                                        Toast.LENGTH_LONG,
+                                                    ).show()
+                                                }
                                             }
                                         }
                                         is ProfileImportHandler.ImportResult.Error -> {

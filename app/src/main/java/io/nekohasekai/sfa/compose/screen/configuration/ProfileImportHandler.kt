@@ -6,6 +6,8 @@ import android.provider.OpenableColumns
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.ProfileContent
 import io.nekohasekai.sfa.R
+import io.nekohasekai.sfa.dams.importer.A2MExportFile
+import io.nekohasekai.sfa.dams.importer.ClipboardImporter
 import io.nekohasekai.sfa.database.Profile
 import io.nekohasekai.sfa.database.ProfileManager
 import io.nekohasekai.sfa.database.TypedProfile
@@ -16,7 +18,14 @@ import java.util.Date
 
 class ProfileImportHandler(private val context: Context) {
     sealed class ImportResult {
-        data class Success(val profile: Profile) : ImportResult()
+        data class Success(
+            val profiles: List<Profile>,
+            val summary: String? = null,
+        ) : ImportResult() {
+            val profile: Profile get() = profiles.first()
+
+            constructor(profile: Profile) : this(listOf(profile))
+        }
 
         data class Error(val message: String) : ImportResult()
     }
@@ -50,8 +59,13 @@ class ProfileImportHandler(private val context: Context) {
             // Get the filename from the URI
             val filename = getFileNameFromUri(uri)
 
+            val dataString = String(data, Charsets.UTF_8)
+            // Un export .a2m (simple ou codé) contient un ou plusieurs serveurs.
+            if (A2MExportFile.isA2M(dataString)) {
+                return@withContext importA2M(dataString)
+            }
+
             // Try to detect if it's a JSON configuration file
-            val dataString = String(data)
             if (isJsonConfiguration(dataString)) {
                 // It's a JSON configuration, import it directly as a local profile
                 return@withContext importJsonConfiguration(dataString, filename)
@@ -80,7 +94,16 @@ class ProfileImportHandler(private val context: Context) {
                     ?: return@withContext UriParseResult.Error(context.getString(R.string.error_empty_file))
 
             val filename = getFileNameFromUri(uri)
-            val dataString = String(data)
+            val dataString = String(data, Charsets.UTF_8)
+
+            if (A2MExportFile.isA2M(dataString)) {
+                return@withContext when (val decoded = A2MExportFile.decode(dataString)) {
+                    is A2MExportFile.Decoded.Success ->
+                        UriParseResult.Success(name = filename)
+                    is A2MExportFile.Decoded.Error ->
+                        UriParseResult.Error("Fichier .a2m : ${decoded.message}")
+                }
+            }
 
             if (isJsonConfiguration(dataString)) {
                 return@withContext UriParseResult.Success(name = filename)
@@ -103,6 +126,17 @@ class ProfileImportHandler(private val context: Context) {
 
     suspend fun parseQRCode(data: String): QRCodeParseResult = withContext(Dispatchers.IO) {
         try {
+            if (A2MExportFile.isA2M(data)) {
+                return@withContext when (val decoded = A2MExportFile.decode(data)) {
+                    is A2MExportFile.Decoded.Success ->
+                        QRCodeParseResult.LocalProfile(
+                            name = decoded.entries.firstOrNull()?.name ?: "Export A2M",
+                        )
+                    is A2MExportFile.Decoded.Error ->
+                        QRCodeParseResult.Error("Fichier .a2m : ${decoded.message}")
+                }
+            }
+
             // Check if it's a sing-box remote profile import link
             if (data.startsWith("sing-box://import-remote-profile")) {
                 try {
@@ -147,6 +181,10 @@ class ProfileImportHandler(private val context: Context) {
 
     suspend fun importFromQRCode(data: String): ImportResult = withContext(Dispatchers.IO) {
         try {
+            if (A2MExportFile.isA2M(data)) {
+                return@withContext importA2M(data)
+            }
+
             // Check if it's a sing-box remote profile import link
             if (data.startsWith("sing-box://import-remote-profile")) {
                 try {
@@ -208,6 +246,41 @@ class ProfileImportHandler(private val context: Context) {
             importProfile(content)
         } catch (e: Exception) {
             ImportResult.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    /**
+     * Importe un export `.a2m` simple ou codé. Le décodeur vérifie d'abord
+     * l'empreinte SHA-256, puis le gestionnaire de presse-papiers existant
+     * crée et valide chaque profil (aucune logique d'import dupliquée).
+     */
+    private suspend fun importA2M(text: String): ImportResult {
+        val decoded = A2MExportFile.decode(text)
+        if (decoded is A2MExportFile.Decoded.Error) {
+            return ImportResult.Error("Fichier .a2m : ${decoded.message}")
+        }
+
+        return when (val outcome = ClipboardImporter(context).importText(text)) {
+            is ClipboardImporter.Outcome.Success -> {
+                val imported = outcome.result
+                val summary =
+                    buildString {
+                        append("${imported.profiles.size} serveur(s) importé(s)")
+                        if (imported.skipped > 0) {
+                            append(", ${imported.skipped} doublon(s) ignoré(s)")
+                        }
+                        if (imported.failures.isNotEmpty()) {
+                            append(", ${imported.failures.size} échec(s)")
+                            imported.failures.firstOrNull()?.let { append(" : $it") }
+                        }
+                    }
+                if (imported.profiles.isEmpty()) {
+                    ImportResult.Error(summary)
+                } else {
+                    ImportResult.Success(imported.profiles, summary)
+                }
+            }
+            is ClipboardImporter.Outcome.Error -> ImportResult.Error(outcome.message)
         }
     }
 
