@@ -163,9 +163,11 @@ internal object A2MProfileInfo {
             val root = json.parseToJsonElement(File(profile.typed.path).readText()).jsonObject
             val servers = root["dns"]?.jsonObject?.get("servers")?.jsonArray ?: return@runCatching emptyList()
             servers.mapNotNull { element ->
-                (element as? JsonPrimitive)?.contentOrNull
-                    ?: (element as? JsonObject)?.get("server")?.jsonPrimitive?.contentOrNull
-            }
+                val obj = element as? JsonObject
+                (obj?.get("server") as? JsonPrimitive)?.contentOrNull
+                    ?: (obj?.get("address") as? JsonPrimitive)?.contentOrNull
+                    ?: (element as? JsonPrimitive)?.contentOrNull
+            }.filter { it.isNotBlank() }
         }.getOrDefault(emptyList())
 
     private fun fallback(profile: Profile): String = typeLabel(profile)

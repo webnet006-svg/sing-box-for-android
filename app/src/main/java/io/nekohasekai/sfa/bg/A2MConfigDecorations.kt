@@ -57,7 +57,10 @@ object A2MConfigDecorations {
         tls: TlsOptions? = null,
         gaming: Boolean = false,
     ): String {
-        var content = raw
+        // Les profils importés peuvent encore utiliser l'ancien format DNS,
+        // supprimé par sing-box 1.14. On les normalise avant toute autre
+        // décoration, même lorsque le DNS personnalisé est désactivé.
+        var content = runCatching { normalizeDns(raw) }.getOrDefault(raw)
         if (bypassPrivate) content = runCatching { withBypassPrivateNetworks(content) }.getOrDefault(content)
         if (dns != null) content = runCatching { withDnsOverride(content, dns) }.getOrDefault(content)
         if (engine != null) content = runCatching { withEngine(content, engine) }.getOrDefault(content)
@@ -121,6 +124,303 @@ object A2MConfigDecorations {
         route["rules"] = JsonArray(rules)
     }
 
+    private val nonProxyOutboundTypes = setOf("direct", "block", "dns")
+
+    /** Serveurs DNS qui ne dialent pas eux-mêmes : un detour n'y a pas de sens. */
+    private val nonDialingDnsTypes = setOf(
+        "local",
+        "hosts",
+        "dhcp",
+        "mdns",
+        "fakeip",
+        "tailscale",
+        "openconnect",
+        "openvpn",
+        "resolved",
+    )
+
+    private data class ParsedDnsAddress(
+        val type: String,
+        val server: String? = null,
+        val port: Int? = null,
+        val path: String? = null,
+        val interfaceName: String? = null,
+    )
+
+    /**
+     * Tag d'un sortant qui peut réellement porter du trafic (proxy, selector,
+     * urltest…). On refuse route.final s'il pointe vers direct/block/dns :
+     * un detour DNS vers un direct vide fait échouer sing-box 1.12+.
+     */
+    private fun proxyTagOf(
+        root: Map<String, JsonElement>,
+        outbounds: List<JsonElement>,
+    ): String? {
+        val finalTag = ((root["route"] as? JsonObject)?.get("final") as? JsonPrimitive)?.content
+        if (finalTag != null) {
+            val finalType = outbounds.firstOrNull { outboundTag(it) == finalTag }?.let(::outboundType)
+            if (finalType != null && finalType !in nonProxyOutboundTypes) return finalTag
+        }
+        return outbounds.firstOrNull {
+            val type = outboundType(it)
+            type != null && type !in nonProxyOutboundTypes
+        }?.let(::outboundTag)
+    }
+
+    // ── Normalisation DNS (sing-box 1.12+) ───────────────────────────────────
+
+    /**
+     * Convertit les serveurs DNS legacy (`address`) vers le format `type`/`server`
+     * de sing-box 1.12+, migre `address_resolver` vers `domain_resolver` et
+     * supprime les detours directs invalides.
+     *
+     * Depuis sing-box 1.12, l'absence de detour signifie « direct par défaut » et
+     * est valide. Un detour explicite vers un sortant direct vide est refusé ;
+     * c'est la cause du crash `detour to an empty direct outbound makes no sense`.
+     */
+    fun normalizeDns(content: String): String =
+        runCatching {
+            val root = parseRoot(content)
+            val dns = root["dns"] as? JsonObject ?: return@runCatching content
+            val servers = dns["servers"] as? JsonArray ?: return@runCatching content
+            if (servers.isEmpty()) return@runCatching content
+
+            val outbounds = outboundListOf(root)
+            val outboundTypes =
+                outbounds.mapNotNull { element ->
+                    val tag = outboundTag(element) ?: return@mapNotNull null
+                    tag to outboundType(element)
+                }.toMap()
+
+            val resolverTags = resolverTagsOf(root, dns)
+            val dnsMutable = dns.toMutableMap()
+            dnsMutable["servers"] = JsonArray(
+                servers.map { normalizeDnsServer(it, outboundTypes, resolverTags, dnsMutable) },
+            )
+            // `dns.fakeip` n'existe plus dans le nouveau format : les plages
+            // ont été recopiées dans le serveur de type fakeip.
+            if ((dnsMutable["servers"] as? JsonArray)?.any {
+                    (it as? JsonObject)?.get("type")?.let { type -> (type as? JsonPrimitive)?.content } == "fakeip"
+                } == true
+            ) {
+                dnsMutable.remove("fakeip")
+            }
+            root["dns"] = JsonObject(dnsMutable)
+            encode(root)
+        }.getOrDefault(content)
+
+    /**
+     * Tags DNS utilisés pour résoudre des noms de serveurs (bootstrap/local).
+     * Ils ne doivent jamais passer par le proxy, sous peine de dépendance
+     * circulaire : le proxy a besoin d'eux pour être joint.
+     */
+    private fun resolverTagsOf(
+        root: Map<String, JsonElement>,
+        dns: JsonObject,
+    ): Set<String> {
+        val tags = mutableSetOf<String>()
+
+        fun addResolver(value: JsonElement?) {
+            when (value) {
+                is JsonPrimitive -> value.content.takeIf { it.isNotBlank() }?.let(tags::add)
+                is JsonObject ->
+                    (value["server"] as? JsonPrimitive)?.content
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(tags::add)
+                else -> Unit
+            }
+        }
+
+        val route = root["route"] as? JsonObject
+        addResolver(route?.get("default_domain_resolver"))
+        (root["outbounds"] as? JsonArray)?.forEach {
+            addResolver((it as? JsonObject)?.get("domain_resolver"))
+        }
+        (root["inbounds"] as? JsonArray)?.forEach {
+            addResolver((it as? JsonObject)?.get("domain_resolver"))
+        }
+        (dns["servers"] as? JsonArray)?.forEach {
+            val server = it as? JsonObject
+            addResolver(server?.get("domain_resolver"))
+            addResolver(server?.get("address_resolver"))
+        }
+        (route?.get("rules") as? JsonArray)?.forEach {
+            addResolver((it as? JsonObject)?.get("domain_resolver"))
+        }
+        return tags
+    }
+
+    private fun normalizeDnsServer(
+        element: JsonElement,
+        outboundTypes: Map<String, String?>,
+        resolverTags: Set<String>,
+        dns: MutableMap<String, JsonElement>,
+    ): JsonElement {
+        val obj = element as? JsonObject ?: return element
+        val mutable = obj.toMutableMap()
+
+        // 1. Ancien champ address -> type/server/server_port/path.
+        val legacyAddress = (mutable["address"] as? JsonPrimitive)?.content
+        val existingType = (mutable["type"] as? JsonPrimitive)?.content
+        if (existingType.isNullOrBlank() && !legacyAddress.isNullOrBlank()) {
+            val parsed = parseDnsAddress(legacyAddress)
+            if (parsed != null) {
+                mutable["type"] = JsonPrimitive(parsed.type)
+                parsed.server?.let { mutable["server"] = JsonPrimitive(it) }
+                parsed.port?.let { mutable["server_port"] = JsonPrimitive(it) }
+                parsed.path?.let { mutable["path"] = JsonPrimitive(it) }
+                parsed.interfaceName?.let { mutable["interface"] = JsonPrimitive(it) }
+                if (parsed.type == "fakeip") {
+                    (dns["fakeip"] as? JsonObject)?.let { fakeip ->
+                        fakeip["inet4_range"]?.let {
+                            if (!mutable.containsKey("inet4_range")) mutable["inet4_range"] = it
+                        }
+                        fakeip["inet6_range"]?.let {
+                            if (!mutable.containsKey("inet6_range")) mutable["inet6_range"] = it
+                        }
+                    }
+                }
+                mutable.remove("address")
+            }
+        }
+
+        // 2. Migration des champs de résolution legacy.
+        (mutable.remove("address_resolver") as? JsonPrimitive)?.content
+            ?.takeIf { it.isNotBlank() }
+            ?.let { resolver ->
+                if (!mutable.containsKey("domain_resolver")) {
+                    mutable["domain_resolver"] = JsonPrimitive(resolver)
+                }
+            }
+        (mutable.remove("address_strategy") as? JsonPrimitive)?.content
+            ?.takeIf { it.isNotBlank() }
+            ?.let { strategy ->
+                if (!mutable.containsKey("domain_strategy")) {
+                    mutable["domain_strategy"] = JsonPrimitive(strategy)
+                }
+            }
+        // `strategy` était un réglage par serveur. Dans le nouveau format il est
+        // porté par dns.strategy (ou par une règle DNS) ; on conserve la première
+        // valeur rencontrée pour ne pas laisser un champ devenu inconnu.
+        (mutable.remove("strategy") as? JsonPrimitive)?.content
+            ?.takeIf { it.isNotBlank() }
+            ?.let { strategy ->
+                if (!dns.containsKey("strategy")) {
+                    dns["strategy"] = JsonPrimitive(strategy)
+                }
+            }
+
+        // 3. Un detour vers direct/block/dns (ou vers un tag inexistant) est
+        // invalide pour un serveur DNS. On le retire : sans detour, sing-box
+        // utilise sa sortie directe vide par défaut, ce qui est autorisé.
+        val type = (mutable["type"] as? JsonPrimitive)?.content
+        val tag = (mutable["tag"] as? JsonPrimitive)?.content
+        val detour = (mutable["detour"] as? JsonPrimitive)?.content
+        if (detour != null) {
+            val targetType = outboundTypes[detour]
+            val invalidDetour =
+                detour.isBlank() ||
+                    targetType == null ||
+                    targetType?.let { it in nonProxyOutboundTypes } == true ||
+                    type?.let { it in nonDialingDnsTypes } == true ||
+                    tag?.let { it in resolverTags } == true
+            if (invalidDetour) {
+                mutable.remove("detour")
+            }
+        }
+
+        return JsonObject(mutable)
+    }
+
+    private fun parseDnsAddress(address: String): ParsedDnsAddress? {
+        val value = address.trim()
+        if (value.isEmpty()) return null
+        when (value.lowercase()) {
+            "local" -> return ParsedDnsAddress("local")
+            "fakeip" -> return ParsedDnsAddress("fakeip")
+        }
+        // RCode n'a pas d'équivalent en serveur DNS 1.12+ (il devient une règle).
+        if (value.startsWith("rcode://", ignoreCase = true)) return null
+
+        val scheme = value.substringBefore("://", "").lowercase()
+        if (scheme.isNotEmpty()) {
+            val rest = value.substringAfter("://")
+            return when (scheme) {
+                "udp", "tcp" -> parseHostPort(rest, scheme, 53)
+                "tls" -> parseHostPort(rest, "tls", 853)
+                "quic" -> parseHostPort(rest, "quic", 853)
+                "https" -> parseHttpAddress(rest, "https", 443)
+                "h3" -> parseHttpAddress(rest, "h3", 443)
+                "dhcp" -> {
+                    val interfaceName = rest.substringBefore("/")
+                        .takeIf { it.isNotBlank() && !it.equals("auto", ignoreCase = true) }
+                    ParsedDnsAddress("dhcp", interfaceName = interfaceName)
+                }
+                else -> null
+            }
+        }
+        // Une adresse sans schéma est un serveur UDP (IP ou nom de domaine).
+        return parseHostPort(value, "udp", 53)
+    }
+
+    private fun parseHostPort(
+        value: String,
+        type: String,
+        defaultPort: Int,
+    ): ParsedDnsAddress? {
+        val authority = value.substringBefore('/')
+        if (authority.isBlank()) return null
+        val (host, port) = splitHostPort(authority)
+        if (host.isBlank()) return null
+        return ParsedDnsAddress(type, host, port ?: defaultPort)
+    }
+
+    private fun parseHttpAddress(
+        value: String,
+        type: String,
+        defaultPort: Int,
+    ): ParsedDnsAddress? {
+        val slash = value.indexOf('/')
+        val authority = if (slash >= 0) value.substring(0, slash) else value
+        val path = if (slash >= 0) value.substring(slash) else "/dns-query"
+        if (authority.isBlank()) return null
+        val (host, port) = splitHostPort(authority)
+        if (host.isBlank()) return null
+        return ParsedDnsAddress(type, host, port ?: defaultPort, path)
+    }
+
+    private fun splitHostPort(authority: String): Pair<String, Int?> {
+        if (authority.startsWith("[")) {
+            val end = authority.indexOf(']')
+            if (end > 0) {
+                val host = authority.substring(1, end)
+                val port = authority.substring(end + 1).removePrefix(":").toIntOrNull()
+                return host to port
+            }
+        }
+        if (authority.count { it == ':' } == 1) {
+            val host = authority.substringBeforeLast(':')
+            val port = authority.substringAfterLast(':').toIntOrNull()
+            if (host.isNotBlank() && port != null) return host to port
+        }
+        return authority to null
+    }
+
+    private fun isIpLiteral(value: String): Boolean {
+        val host = value.trim().removePrefix("[").removeSuffix("]").substringBefore('%')
+        if (host.isEmpty()) return false
+        if (host.contains(':')) {
+            return host.all {
+                it.isDigit() || it in 'a'..'f' || it in 'A'..'F' || it == ':' || it == '.'
+            }
+        }
+        val parts = host.split('.')
+        return parts.size == 4 && parts.all { part ->
+            part.isNotEmpty() && part.all { char -> char.isDigit() } &&
+                part.toIntOrNull()?.let { it in 0..255 } == true
+        }
+    }
+
     // ── Contournement des réseaux privés ─────────────────────────────────────
 
     /** Tout le trafic LAN / lien-local reste hors du tunnel. */
@@ -158,23 +458,17 @@ object A2MConfigDecorations {
             // on conserve alors le DNS du profil au lieu de casser le tunnel.
             if (override.type !in setOf("https", "tls", "quic", "udp") ||
                 override.remoteServer.isBlank() ||
-                override.bootstrapServer.isBlank()
+                override.bootstrapServer.isBlank() ||
+                // Le bootstrap est un serveur UDP sans resolver : il doit être
+                // une adresse IP littérale, sinon il ne peut pas démarrer.
+                !isIpLiteral(override.bootstrapServer)
             ) {
                 return@runCatching content
             }
             val root = parseRoot(content)
             val outbounds = outboundListOf(root)
-            val directTag = ensureOutboundOfType(outbounds, "direct")
-            root["outbounds"] = JsonArray(outbounds)
-
             val route = routeMap(root)
-            val finalTag =
-                (route["final"] as? JsonPrimitive)?.content
-                    ?: outbounds
-                        .firstOrNull {
-                            val t = outboundType(it)
-                            t != null && t !in setOf("direct", "block", "dns")
-                        }?.let { outboundTag(it) }
+            val finalTag = proxyTagOf(root, outbounds)
 
             val remote = buildJsonObject {
                 put("type", override.type)
@@ -182,12 +476,18 @@ object A2MConfigDecorations {
                 put("server", override.remoteServer)
                 if (override.type == "https") put("path", "/dns-query")
                 if (finalTag != null) put("detour", finalTag)
+                // Si le serveur distant est un nom, il est résolu par le
+                // bootstrap direct avant d'être joint via le proxy.
+                if (!isIpLiteral(override.remoteServer)) {
+                    put("domain_resolver", "bootstrap")
+                }
             }
             val bootstrap = buildJsonObject {
                 put("type", "udp")
                 put("tag", "bootstrap")
                 put("server", override.bootstrapServer)
-                put("detour", directTag)
+                // Jamais de detour ici : un detour vers un direct vide fait
+                // échouer sing-box 1.12+ au démarrage du transport DNS.
             }
             root["dns"] = buildJsonObject {
                 put("servers", buildJsonArray {

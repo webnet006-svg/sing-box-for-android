@@ -107,7 +107,8 @@ class A2MConfigDecorationsTest {
         val bootstrap = servers[1].jsonObject
         assertEquals("udp", bootstrap["type"]!!.jsonPrimitive.content)
         assertEquals("9.9.9.9", bootstrap["server"]!!.jsonPrimitive.content)
-        assertEquals("direct", bootstrap["detour"]!!.jsonPrimitive.content)
+        // Un detour vers le direct vide est refusé par sing-box 1.12+.
+        assertFalse(bootstrap.containsKey("detour"))
         assertEquals("remote", dns["final"]!!.jsonPrimitive.content)
         assertEquals("prefer_ipv4", dns["strategy"]!!.jsonPrimitive.content)
         assertEquals(
@@ -156,6 +157,129 @@ class A2MConfigDecorationsTest {
         val remote = root["dns"]!!.jsonObject["servers"]!!.jsonArray[0].jsonObject
         // Sans route.final explicite, la résolution passe par le premier sortant proxy du profil.
         assertEquals("proxy", remote["detour"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun dnsOverrideIgnoresRouteFinalPointingToDirect() {
+        val config =
+            """{"outbounds":[{"type":"direct","tag":"direct"},{"type":"vmess","tag":"proxy"}],""" +
+                """"route":{"final":"direct","rules":[]}}"""
+        val root = parse(
+            A2MConfigDecorations.withDnsOverride(
+                config,
+                A2MConfigDecorations.DnsOverride(type = "https", remoteServer = "1.1.1.1", bootstrapServer = "9.9.9.9"),
+            ),
+        )
+        val remote = root["dns"]!!.jsonObject["servers"]!!.jsonArray[0].jsonObject
+        assertEquals("proxy", remote["detour"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun dnsOverrideResolvesDomainRemoteThroughBootstrap() {
+        val config = """{"outbounds":[{"type":"vmess","tag":"proxy"}]}"""
+        val root = parse(
+            A2MConfigDecorations.withDnsOverride(
+                config,
+                A2MConfigDecorations.DnsOverride(type = "https", remoteServer = "dns.google", bootstrapServer = "9.9.9.9"),
+            ),
+        )
+        val servers = root["dns"]!!.jsonObject["servers"]!!.jsonArray
+        val remote = servers[0].jsonObject
+        assertEquals("bootstrap", remote["domain_resolver"]!!.jsonPrimitive.content)
+        assertFalse(servers[1].jsonObject.containsKey("detour"))
+    }
+
+    @Test
+    fun dnsOverrideRejectsNonIpBootstrap() {
+        val config = """{"outbounds":[{"type":"vmess","tag":"proxy"}],"dns":{"servers":[]}}"""
+        assertEquals(
+            config,
+            A2MConfigDecorations.withDnsOverride(
+                config,
+                A2MConfigDecorations.DnsOverride(type = "https", remoteServer = "1.1.1.1", bootstrapServer = "dns.google"),
+            ),
+        )
+    }
+
+    // ── Normalisation DNS legacy ──────────────────────────────────────────────
+
+    @Test
+    fun normalizeDnsConvertsLegacyServersAndRemovesDirectDetour() {
+        val config =
+            """{"outbounds":[{"type":"vmess","tag":"proxy"},{"type":"direct","tag":"direct"}],""" +
+                """"dns":{"servers":[""" +
+                """{"tag":"remote","address":"https://dns.google/dns-query","address_resolver":"local","address_strategy":"ipv4_only","detour":"direct"},""" +
+                """{"tag":"plain","address":"1.1.1.1"},""" +
+                """{"tag":"sys","address":"local","detour":"direct"}]}}"""
+        val root = parse(A2MConfigDecorations.normalizeDns(config))
+        val servers = root["dns"]!!.jsonObject["servers"]!!.jsonArray
+
+        val remote = servers[0].jsonObject
+        assertEquals("https", remote["type"]!!.jsonPrimitive.content)
+        assertEquals("dns.google", remote["server"]!!.jsonPrimitive.content)
+        assertEquals("/dns-query", remote["path"]!!.jsonPrimitive.content)
+        assertEquals("local", remote["domain_resolver"]!!.jsonPrimitive.content)
+        assertEquals("ipv4_only", remote["domain_strategy"]!!.jsonPrimitive.content)
+        assertFalse(remote.containsKey("address"))
+        assertFalse(remote.containsKey("detour"))
+
+        val plain = servers[1].jsonObject
+        assertEquals("udp", plain["type"]!!.jsonPrimitive.content)
+        assertEquals("1.1.1.1", plain["server"]!!.jsonPrimitive.content)
+        assertEquals(53, plain["server_port"]!!.jsonPrimitive.content.toInt())
+        assertFalse(plain.containsKey("detour"))
+
+        val system = servers[2].jsonObject
+        assertEquals("local", system["type"]!!.jsonPrimitive.content)
+        assertFalse(system.containsKey("detour"))
+    }
+
+    @Test
+    fun normalizeDnsKeepsProxyDetourAndMovesLegacyStrategy() {
+        val config =
+            """{"outbounds":[{"type":"vmess","tag":"proxy"}],"dns":{"servers":[""" +
+                """{"type":"https","tag":"remote","server":"1.1.1.1","detour":"proxy"},""" +
+                """{"address":"8.8.8.8","strategy":"ipv6_only"}]}}"""
+        val root = parse(A2MConfigDecorations.normalizeDns(config))
+        val dns = root["dns"]!!.jsonObject
+        val servers = dns["servers"]!!.jsonArray
+
+        assertEquals("proxy", servers[0].jsonObject["detour"]!!.jsonPrimitive.content)
+        assertEquals("ipv6_only", dns["strategy"]!!.jsonPrimitive.content)
+        assertFalse(servers[1].jsonObject.containsKey("strategy"))
+    }
+
+    @Test
+    fun normalizeDnsRemovesProxyDetourFromResolverServer() {
+        val config =
+            """{"outbounds":[{"type":"vmess","tag":"proxy","server":"example.com","domain_resolver":"bootstrap"}],""" +
+                """"dns":{"servers":[{"type":"udp","tag":"bootstrap","server":"9.9.9.9","detour":"proxy"}]}}"""
+        val root = parse(A2MConfigDecorations.normalizeDns(config))
+        val bootstrap = root["dns"]!!.jsonObject["servers"]!!.jsonArray[0].jsonObject
+        assertFalse(bootstrap.containsKey("detour"))
+    }
+
+    @Test
+    fun decorateNormalizesLegacyDnsEvenWithoutDnsOverride() {
+        val config =
+            """{"outbounds":[{"type":"vmess","tag":"proxy"},{"type":"direct","tag":"direct"}],""" +
+                """"dns":{"servers":[{"tag":"remote","address":"tls://dns.google","detour":"direct"}]},"route":{"rules":[]}}"""
+        val root = parse(
+            A2MConfigDecorations.decorate(
+                raw = config,
+                bypassPrivate = false,
+                dns = null,
+                engine = null,
+                adBlock = true,
+                hotspotPort = null,
+            ),
+        )
+        val remote = root["dns"]!!.jsonObject["servers"]!!.jsonArray[0].jsonObject
+        assertEquals("tls", remote["type"]!!.jsonPrimitive.content)
+        assertEquals("dns.google", remote["server"]!!.jsonPrimitive.content)
+        assertFalse(remote.containsKey("detour"))
+        val firstRule = root["route"]!!.jsonObject["rules"]!!.jsonArray[0].jsonObject
+        assertEquals("geosite-category-ads-all", firstRule["rule_set"]!!.jsonArray[0].jsonPrimitive.content)
     }
 
     // ── Réglages moteur ──────────────────────────────────────────────────────
