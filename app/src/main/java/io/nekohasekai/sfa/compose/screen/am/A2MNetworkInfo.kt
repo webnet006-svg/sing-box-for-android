@@ -135,3 +135,32 @@ internal fun ipMatchesRules(ip: String, rules: List<Pair<Char, String>>): Boolea
             else -> ip.contains(value)
         }
     }
+
+/**
+ * Contrôle de saisie des règles d'IP. Retourne la liste des problèmes lisibles ;
+ * une liste vide signifie que la recherche peut démarrer. Les règles vides
+ * utilisent la liste par défaut intégrée, qui est toujours valide.
+ */
+internal fun validateIpRules(raw: String): List<String> {
+    val rules = effectiveIpRules(raw)
+    if (rules.isEmpty()) return listOf("Aucune règle d'IP exploitable.")
+    val problems = mutableListOf<String>()
+    rules.forEach { (op, value) ->
+        val label =
+            when (op) {
+                '^' -> "préfixe « $value »"
+                '$' -> "suffixe « $value »"
+                '=' -> "adresse exacte « $value »"
+                else -> "contenu « $value »"
+            }
+        if (value.contains(':')) {
+            problems += "Règle $label : IPv6 non pris en charge par l'IP Finder."
+        } else if (!value.matches(Regex("""\d{1,3}(\.\d{1,3}){0,3}"""))) {
+            problems += "Règle $label : format attendu 10.21 ou 10.21.3.4."
+        } else if (value.split('.').any { octet -> octet.toIntOrNull()?.let { it !in 0..255 } ?: true }) {
+            problems += "Règle $label : chaque bloc doit être compris entre 0 et 255."
+        }
+    }
+    return problems.distinct()
+}
+

@@ -199,8 +199,9 @@
         </service>
 
         <!-- IP Finder : services « assistant » déclarés pour le rôle Assistant
-             (Paramètres > Applications par défaut). Rôle demandé uniquement pour
-             basculer le mode avion ; aucun audio, aucune lecture d'écran. -->
+             (Paramètres > Applications par défaut). Le geste d'assistant ouvre
+             l'IP Finder ; aucun audio, aucune lecture d'écran. Le mode avion
+             reste soumis à WRITE_SECURE_SETTINGS (ADB). -->
         <service
             android:name=".bg.A2MVoiceInteractionService"
             android:exported="true"
@@ -215,8 +216,19 @@
         </service>
         <service
             android:name=".bg.A2MVoiceInteractionSessionService"
-            android:exported="false"
+            android:exported="true"
             android:permission="android.permission.BIND_VOICE_INTERACTION" />
+        <!-- Service de reconnaissance no-op exigé par la déclaration assistant.
+             Aucun audio n'est capturé ni traité. -->
+        <service
+            android:name=".bg.A2MRecognitionService"
+            android:exported="true"
+            android:label="A2M TUN"
+            android:permission="android.permission.BIND_SPEECH_RECOGNITION">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+            </intent-filter>
+        </service>
 
         <receiver
             android:name=".bg.BootReceiver"

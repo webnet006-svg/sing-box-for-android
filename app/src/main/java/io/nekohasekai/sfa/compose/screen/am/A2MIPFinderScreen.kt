@@ -94,11 +94,17 @@ fun A2MIPFinderScreen(
     var statusText by remember { mutableStateOf<String?>(null) }
     var attempt by remember { mutableStateOf(0) }
     var foundIp by remember { mutableStateOf<String?>(null) }
+    var observedCount by remember { mutableStateOf(0) }
+    var searchStartedAt by remember { mutableStateOf<Long?>(null) }
+    var searchDurationSec by remember { mutableStateOf<Long?>(null) }
+    var lastError by remember { mutableStateOf<String?>(null) }
     var historyVersion by remember { mutableStateOf(0) }
     var diagVersion by remember { mutableStateOf(0) }
     var searchJob by remember { mutableStateOf<Job?>(null) }
 
     val rules = remember(rulesText) { effectiveIpRules(rulesText) }
+    val ruleProblems = remember(rulesText) { validateIpRules(rulesText) }
+
 
     // IP réelle + Wi-Fi : relus toutes les 3 s tant que l'écran est visible.
     LaunchedEffect(Unit) {
@@ -261,9 +267,12 @@ fun A2MIPFinderScreen(
                 A2MSettingsNotice(
                     text =
                     "Bascule automatique du mode avion indisponible : la permission " +
-                        "WRITE_SECURE_SETTINGS n'est pas accordée (accordez-la via ADB). " +
-                        "Mode manuel : basculez le mode avion vous-même pendant la " +
-                        "recherche, l'app détecte chaque nouvelle IP et vérifie vos règles.",
+                        "WRITE_SECURE_SETTINGS n'est pas accordée. Mode manuel : basculez " +
+                        "le mode avion vous-même pendant la recherche, l'app détecte chaque " +
+                        "nouvelle IP et vérifie vos règles.\n\n" +
+                        "Commande ADB (une seule fois) :\n" +
+                        "adb shell pm grant ${context.packageName} " +
+                        "android.permission.WRITE_SECURE_SETTINGS",
                 )
             }
 
@@ -286,11 +295,24 @@ fun A2MIPFinderScreen(
                     color = A2MColors.Text,
                 )
                 AssistantDiagRow("Service déclaré", diag.declared)
-                AssistantDiagRow("Service résolu par Android", diag.resolved)
+                AssistantDiagRow("Reconnaissance déclarée", diag.recognitionDeclared)
+                AssistantDiagRow("Service résolu par Android", diag.ourServiceActive)
                 AssistantDiagRow("Rôle Assistant actif pour A2M TUN", diag.roleHeld)
                 Text(
                     text = "Application assistante actuelle : ${diag.currentLabel}",
                     style = MaterialTheme.typography.bodyMedium,
+                    color = A2MColors.Muted,
+                )
+                Text(
+                    text =
+                        if (diag.roleHeld) {
+                            "Le geste d'assistant ouvre l'IP Finder. Le rôle Assistant " +
+                                "n'accorde pas la permission de basculer le mode avion."
+                        } else {
+                            "Sélectionnez A2M TUN comme application d'assistance : le geste " +
+                                "d'assistant ouvrira alors directement l'IP Finder."
+                        },
+                    style = MaterialTheme.typography.bodySmall,
                     color = A2MColors.Muted,
                 )
                 if (diag.roleHeld) {
@@ -310,7 +332,7 @@ fun A2MIPFinderScreen(
                     },
                 )
                 A2MFinderButton(
-                    label = "Revenir à l'assistant précédent",
+                    label = "Ouvrir les réglages d'assistant",
                     outline = true,
                     onClick = {
                         runCatching {
@@ -318,6 +340,7 @@ fun A2MIPFinderScreen(
                         }
                     },
                 )
+
             }
 
             // ── IP recherchées ─────────────────────────────────────────────
@@ -401,6 +424,35 @@ fun A2MIPFinderScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = A2MColors.Text,
                 )
+                if (ruleProblems.isNotEmpty()) {
+                    Text(
+                        text = "Corrigez la liste avant de lancer la recherche :",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    ruleProblems.take(4).forEach { problem ->
+                        Text(
+                            text = "• $problem",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    if (ruleProblems.size > 4) {
+                        Text(
+                            text = "• … et ${ruleProblems.size - 4} autre(s) problème(s)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "Liste valide : la recherche peut démarrer.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = A2MColors.Accent,
+                    )
+                }
+
             }
 
             // ── Réglages de recherche ──────────────────────────────────────
@@ -523,11 +575,19 @@ fun A2MIPFinderScreen(
                 }
                 A2MFinderButton(
                     label = if (searching) "Recherche en cours…" else "Trouver des IP",
-                    enabled = !searching,
+                    enabled = !searching && ruleProblems.isEmpty(),
                     onClick = {
                         if (searching) return@A2MFinderButton
+                        if (ruleProblems.isNotEmpty()) {
+                            lastError = "Corrigez les règles d'IP avant de lancer la recherche."
+                            return@A2MFinderButton
+                        }
                         foundIp = null
+                        lastError = null
+                        observedCount = 0
+                        searchDurationSec = null
                         attempt = 0
+                        searchStartedAt = System.currentTimeMillis()
                         statusText = "Cycle 1 — activation du mode avion…"
                         val job =
                             scope.launch {
@@ -548,7 +608,10 @@ fun A2MIPFinderScreen(
                                             onStatus = { statusText = it },
                                             onIp = { ip -> currentIp = ip },
                                             onFallback = { canToggleAirplane = false },
-                                            onObserved = { historyVersion++ },
+                                            onObserved = {
+                                                observedCount++
+                                                historyVersion++
+                                            },
                                         )
                                     foundIp = found
                                     statusText =
@@ -557,13 +620,50 @@ fun A2MIPFinderScreen(
                                         } else {
                                             "Recherche terminée sans IP correspondante."
                                         }
+                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                    statusText = "Recherche arrêtée."
+                                    throw e
+                                } catch (e: Exception) {
+                                    lastError = e.message ?: e.toString()
+                                    statusText = "Recherche interrompue."
                                 } finally {
                                     searching = false
+                                    searchStartedAt?.let { started ->
+                                        searchDurationSec =
+                                            ((System.currentTimeMillis() - started) / 1000L)
+                                                .coerceAtLeast(0L)
+                                    }
+                                    searchStartedAt = null
+                                    searchJob = null
                                 }
                             }
                         searchJob = job
                     },
                 )
+                if (!searching && (searchDurationSec != null || foundIp != null || lastError != null)) {
+                    Text(
+                        text =
+                        buildString {
+                            append("Bilan : ")
+                            append("$attempt cycle(s)")
+                            append(" · $observedCount IP observée(s)")
+                            searchDurationSec?.let { append(" · ${it}s") }
+                            when {
+                                foundIp != null -> append(" · IP correspondante trouvée")
+                                lastError != null -> append(" · erreur : $lastError")
+                                else -> append(" · aucune IP correspondante")
+                            }
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color =
+                        when {
+                            foundIp != null -> A2MColors.Accent
+                            lastError != null -> MaterialTheme.colorScheme.error
+                            else -> A2MColors.Muted
+                        },
+                    )
+                }
                 foundIp?.let {
                     Text(
                         text = "✔ Trouvée : $it",
@@ -572,6 +672,7 @@ fun A2MIPFinderScreen(
                         color = A2MColors.Accent,
                     )
                 }
+
             }
 
             // ── Chronologie ────────────────────────────────────────────────
@@ -727,56 +828,71 @@ private suspend fun runIpSearch(
     }
 
     var attempt = 0
-    if (canToggle()) {
-        while (attempt < maxCycles && kotlinx.coroutines.currentCoroutineContext().isActive) {
-            attempt++
-            onAttempt(attempt)
-            onStatus("Tentative $attempt/$maxCycles — activation du mode avion…")
-            if (!A2MNetworkInfo.setAirplaneMode(context, true)) {
-                onFallback()
-                break // bascule refusée → veille manuelle
-            }
-            delay(pauseMs)
-            onStatus("Tentative $attempt/$maxCycles — attente du réseau mobile…")
-            A2MNetworkInfo.setAirplaneMode(context, false)
-            var waited = 0
-            var found: String? = null
-            while (waited < 45_000) {
-                val ip = withContext(Dispatchers.IO) { A2MNetworkInfo.readCellularIp() }
-                if (ip != null && ip != lastIp) {
-                    found = observe(ip)
-                    break
+    var airplaneEnabledBySearch = false
+    try {
+        if (canToggle()) {
+            while (attempt < maxCycles && kotlinx.coroutines.currentCoroutineContext().isActive) {
+                attempt++
+                onAttempt(attempt)
+                onStatus("Tentative $attempt/$maxCycles — activation du mode avion…")
+                if (!A2MNetworkInfo.setAirplaneMode(context, true)) {
+                    onFallback()
+                    break // bascule refusée → veille manuelle
                 }
-                delay(2000)
-                waited += 2000
-            }
-            if (found != null) {
-                maybeAutoConnect(serviceStatus, dashboardViewModel)
-                return found
-            }
-            onStatus("Tentative $attempt/$maxCycles — IP non correspondante, cycle suivant…")
-            delay(pauseMs)
-        }
-    } else {
-        onFallback()
-    }
-
-    if (!canToggle() || attempt >= maxCycles) {
-        // Veille manuelle : l'utilisateur bascule le mode avion, l'app observe.
-        onStatus("Mode manuel — basculez le mode avion, l'app observe chaque IP…")
-        while (kotlinx.coroutines.currentCoroutineContext().isActive) {
-            val ip = withContext(Dispatchers.IO) { A2MNetworkInfo.readCellularIp() }
-            if (ip != null && ip != lastIp) {
-                val found = observe(ip)
+                airplaneEnabledBySearch = true
+                delay(pauseMs)
+                onStatus("Tentative $attempt/$maxCycles — attente du réseau mobile…")
+                if (A2MNetworkInfo.setAirplaneMode(context, false)) {
+                    airplaneEnabledBySearch = false
+                }
+                var waited = 0
+                var found: String? = null
+                while (waited < 45_000) {
+                    val ip = withContext(Dispatchers.IO) { A2MNetworkInfo.readCellularIp() }
+                    if (ip != null && ip != lastIp) {
+                        found = observe(ip)
+                        break
+                    }
+                    delay(2000)
+                    waited += 2000
+                }
                 if (found != null) {
                     maybeAutoConnect(serviceStatus, dashboardViewModel)
                     return found
                 }
+                onStatus("Tentative $attempt/$maxCycles — IP non correspondante, cycle suivant…")
+                delay(pauseMs)
             }
-            delay(2000)
+        } else {
+            onFallback()
+        }
+
+        if (!canToggle() || attempt >= maxCycles) {
+            // Veille manuelle : l'utilisateur bascule le mode avion, l'app observe.
+            onStatus("Mode manuel — basculez le mode avion, l'app observe chaque IP…")
+            while (kotlinx.coroutines.currentCoroutineContext().isActive) {
+                val ip = withContext(Dispatchers.IO) { A2MNetworkInfo.readCellularIp() }
+                if (ip != null && ip != lastIp) {
+                    val found = observe(ip)
+                    if (found != null) {
+                        maybeAutoConnect(serviceStatus, dashboardViewModel)
+                        return found
+                    }
+                }
+                delay(2000)
+            }
+        }
+        return null
+    } finally {
+        // Sécurité : ne jamais laisser l'appareil en mode avion après une
+        // annulation, une erreur ou la fin de la recherche. NonCancellable
+        // garantit que la remise à zéro s'exécute même si le job est annulé.
+        if (airplaneEnabledBySearch) {
+            withContext(kotlinx.coroutines.NonCancellable) {
+                A2MNetworkInfo.setAirplaneMode(context, false)
+            }
         }
     }
-    return null
 }
 
 private suspend fun maybeAutoConnect(serviceStatus: Status, dashboardViewModel: DashboardViewModel) {
@@ -788,7 +904,8 @@ private suspend fun maybeAutoConnect(serviceStatus: Status, dashboardViewModel: 
 /** Diagnostic de l'assistant : état réel lu dans le système Android. */
 private class AssistantDiagnostics(
     val declared: Boolean,
-    val resolved: Boolean,
+    val recognitionDeclared: Boolean,
+    val ourServiceActive: Boolean,
     val roleHeld: Boolean,
     val currentLabel: String,
 ) {
@@ -798,27 +915,29 @@ private class AssistantDiagnostics(
             "io.nekohasekai.sfa/io.nekohasekai.sfa.bg.A2MVoiceInteractionService"
 
         fun of(context: Context): AssistantDiagnostics {
-            val declared =
+            val services =
                 runCatching {
                     context.packageManager.getPackageInfo(
                         context.packageName,
                         android.content.pm.PackageManager.GET_SERVICES,
-                    ).services?.any { it.name.endsWith("A2MVoiceInteractionService") } == true
-                }.getOrDefault(false)
+                    ).services?.toList().orEmpty()
+                }.getOrDefault(emptyList())
+            val declared = services.any { it.name.endsWith("A2MVoiceInteractionService") }
+            val recognitionDeclared = services.any { it.name.endsWith("A2MRecognitionService") }
             val current =
                 AndroidSettings.Secure.getString(context.contentResolver, VOICE_INTERACTION_SERVICE)
-            val resolved = !current.isNullOrBlank()
+            val ourServiceActive = current == OUR_SERVICE
             val roleHeld =
                 if (Build.VERSION.SDK_INT >= 29) {
                     val rm = context.getSystemService(android.app.role.RoleManager::class.java)
                     rm?.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT) == true
                 } else {
-                    current == OUR_SERVICE
+                    ourServiceActive
                 }
             val currentLabel =
                 if (current.isNullOrBlank()) {
                     "—"
-                } else if (current == OUR_SERVICE) {
+                } else if (ourServiceActive) {
                     "A2M TUN"
                 } else {
                     runCatching {
@@ -828,7 +947,13 @@ private class AssistantDiagnostics(
                             .loadLabel(context.packageManager).toString()
                     }.getOrDefault(current)
                 }
-            return AssistantDiagnostics(declared, resolved, roleHeld, currentLabel)
+            return AssistantDiagnostics(
+                declared = declared,
+                recognitionDeclared = recognitionDeclared,
+                ourServiceActive = ourServiceActive,
+                roleHeld = roleHeld,
+                currentLabel = currentLabel,
+            )
         }
 
         fun requestAssistantRole(context: Context) {

@@ -111,14 +111,13 @@ fun A2MSettingsScreen(
     // Options mémorisées (réelles + persistées) lues à chaque recomposition.
     var adBlock by remember { mutableStateOf(Settings.adBlockEnabled) }
 
-    // Entrées de recherche : 12 destinations réelles.
+    // Entrées de recherche : destinations réellement accessibles.
     data class Entry(val title: String, val subtitle: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val route: String, val keywords: List<String>)
 
     val entries =
         listOf(
-            Entry("Connexion", "Vitesse, reconnexion, timeout", Icons.Filled.Bolt, A2MRoutes.SETTINGS_CONNECTION, listOf("connexion", "notification", "timeout", "reconnexion", "arrière-plan", "vitesse")),
-            Entry("Anti-censorship", "TLS, SNI, fragmentation", Icons.Filled.Security, A2MRoutes.SETTINGS_ANTI_CENSORSHIP, listOf("anti", "censure", "tls", "sni", "fragmentation")),
-            Entry("Modes avancés", "Ad blocker, gaming", Icons.Filled.SportsEsports, A2MRoutes.SETTINGS_ADVANCED, listOf("avancé", "avance", "ad", "bloqueur", "publicité", "gaming", "jeux")),
+            Entry("Connexion", "Notification, tests réseau", Icons.Filled.Bolt, A2MRoutes.SETTINGS_CONNECTION, listOf("connexion", "notification", "timeout", "test", "vitesse")),
+            Entry("Modes avancés", "Ad blocker, moteur", Icons.Filled.SportsEsports, A2MRoutes.SETTINGS_ADVANCED, listOf("avancé", "avance", "ad", "bloqueur", "publicité")),
             Entry("DNS", "DoH, serveur DNS", Icons.Filled.Dns, A2MRoutes.SETTINGS_DNS, listOf("dns", "doh", "résolution", "serveur")),
             Entry("Routage", "Applications et réseaux", Icons.Filled.Route, A2MRoutes.ROUTING, listOf("routage", "applications", "réseaux", "per", "app")),
             Entry("Moteur réseau", "MTU, mux, pile TUN", Icons.Filled.Memory, A2MRoutes.SETTINGS_ENGINE, listOf("moteur", "mtu", "mux", "pile", "tun", "gvisor")),
@@ -276,51 +275,12 @@ fun A2MSettingsScreen(
                 )
                 A2MDividerLine(inset = 14.dp)
                 A2MSettingRow(
-                    icon = Icons.Filled.Shield,
-                    title = "Timeout de connexion",
-                    subtitle = null,
+                    icon = Icons.Filled.NetworkCheck,
+                    title = "Tests réseau",
+                    subtitle = "Timeout TCP utilisé par le bouton Tester",
                     iconTint = A2MColors.Accent,
                     value = "${Settings.connectionTimeoutSec} s",
                     onClick = { onNavigate(A2MRoutes.SETTINGS_CONNECTION) },
-                )
-                A2MDividerLine(inset = 14.dp)
-                A2MSettingRow(
-                    icon = Icons.Filled.Bolt,
-                    title = "Délai de reconnexion",
-                    subtitle = null,
-                    iconTint = A2MColors.Accent,
-                    value = "${Settings.reconnectDelaySec} s",
-                    onClick = { onNavigate(A2MRoutes.SETTINGS_CONNECTION) },
-                )
-                A2MDividerLine(inset = 14.dp)
-                A2MSettingRow(
-                    icon = Icons.Filled.Shield,
-                    title = "Comportement en arrière-plan",
-                    subtitle = null,
-                    iconTint = A2MColors.Accent,
-                    value = backgroundBehaviorLabel(Settings.backgroundBehavior),
-                    onClick = { onNavigate(A2MRoutes.SETTINGS_CONNECTION) },
-                )
-            }
-        }
-
-        // ── Anti-censorship ─────────────────────────────────────────────
-        item {
-            A2MSettingsGroup(title = "Anti-censorship", icon = Icons.Filled.Security) {
-                A2MSettingRow(
-                    icon = Icons.Filled.Security,
-                    title = "Paramètres TLS & SNI",
-                    subtitle = if (Settings.sniEnabled) "Optimisés" else "Désactivés",
-                    iconTint = A2MColors.AccentUpload,
-                    onClick = { onNavigate(A2MRoutes.SETTINGS_ANTI_CENSORSHIP) },
-                )
-                A2MDividerLine(inset = 14.dp)
-                A2MSettingRow(
-                    icon = Icons.Filled.Bolt,
-                    title = "Fragmentation TLS",
-                    subtitle = if (Settings.tlsFragment) "Activée" else "Désactivée",
-                    iconTint = A2MColors.AccentUpload,
-                    onClick = { onNavigate(A2MRoutes.SETTINGS_ANTI_CENSORSHIP) },
                 )
             }
         }
@@ -338,15 +298,6 @@ fun A2MSettingsScreen(
                         Settings.adBlockEnabled = it
                         notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
                     },
-                )
-                A2MDividerLine(inset = 14.dp)
-                A2MSettingRow(
-                    icon = Icons.Filled.SportsEsports,
-                    title = "Mode gaming",
-                    subtitle = "Priorité aux jeux",
-                    iconTint = A2MColors.Amber,
-                    value = if (Settings.gamingMode) "Activé" else "Désactivé",
-                    onClick = { onNavigate(A2MRoutes.SETTINGS_ADVANCED) },
                 )
                 A2MDividerLine(inset = 14.dp)
                 A2MSettingRow(

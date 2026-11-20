@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- IP Finder : déclaration assistant A2M TUN. Le rôle est demandé uniquement
-     pour basculer le mode avion ; aucune dictée, aucun audio, aucun écran lu. -->
+<!-- IP Finder : déclaration assistant A2M TUN. Le geste d'assistant ouvre
+     l'IP Finder ; aucune dictée, aucun audio, aucun écran lu. Le service de
+     reconnaissance est un no-op exigé par Android. -->
 <voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:sessionService="io.nekohasekai.sfa.bg.A2MVoiceInteractionSessionService" />
+    android:sessionService="io.nekohasekai.sfa.bg.A2MVoiceInteractionSessionService"
+    android:recognitionService="io.nekohasekai.sfa.bg.A2MRecognitionService"
+    android:supportsAssist="true" />

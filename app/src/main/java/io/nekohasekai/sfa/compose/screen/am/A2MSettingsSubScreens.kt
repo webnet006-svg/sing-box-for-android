@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Shield
@@ -134,14 +135,9 @@ fun A2MSettingsConnectionScreen(
     var dynamicNotification by remember { mutableStateOf(Settings.dynamicNotification) }
     var allowBypass by remember { mutableStateOf(Settings.allowBypass) }
 
-    // Options mémorisées dont l'effet moteur n'est pas encore raccordé.
+    // Timeout réellement utilisé par les tests TCP de l'écran Serveurs.
     var timeoutSec by remember { mutableStateOf(Settings.connectionTimeoutSec) }
-    var reconnectDelaySec by remember { mutableStateOf(Settings.reconnectDelaySec) }
-    var backgroundBehavior by remember { mutableStateOf(Settings.backgroundBehavior) }
-
     var showTimeoutDialog by remember { mutableStateOf(false) }
-    var showDelayDialog by remember { mutableStateOf(false) }
-    var showBackgroundDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier =
@@ -176,43 +172,20 @@ fun A2MSettingsConnectionScreen(
         }
 
         item {
-            A2MSettingsGroup(title = "Reconnexion", icon = Icons.Filled.Shield) {
-                A2MSettingSwitchRow(
-                    icon = Icons.Filled.Shield,
-                    title = "Reconnexion automatique",
-                    subtitle = "Réessayer lorsque le tunnel tombe",
-                    checked = false,
-                    onCheckedChange = { /* Non raccordé : conservé pour l'effet réel à venir */ },
-                )
-                A2MDividerLine(inset = 14.dp)
+            A2MSettingsGroup(title = "Tests réseau", icon = Icons.Filled.NetworkCheck) {
                 A2MSettingRow(
-                    icon = Icons.Filled.Shield,
-                    title = "Timeout de connexion",
+                    icon = Icons.Filled.NetworkCheck,
+                    title = "Timeout des tests TCP",
+                    subtitle = "Délai maximal utilisé par « Tester » dans Serveurs",
                     value = "$timeoutSec s",
                     iconTint = A2MColors.Accent,
                     onClick = { showTimeoutDialog = true },
-                )
-                A2MDividerLine(inset = 14.dp)
-                A2MSettingRow(
-                    icon = Icons.Filled.Bolt,
-                    title = "Délai de reconnexion",
-                    value = "$reconnectDelaySec s",
-                    iconTint = A2MColors.Accent,
-                    onClick = { showDelayDialog = true },
                 )
             }
         }
 
         item {
             A2MSettingsGroup(title = "Arrière-plan", icon = Icons.Filled.Shield) {
-                A2MSettingRow(
-                    icon = Icons.Filled.Shield,
-                    title = "Comportement en arrière-plan",
-                    value = backgroundBehaviorLabel(backgroundBehavior),
-                    iconTint = A2MColors.Accent,
-                    onClick = { showBackgroundDialog = true },
-                )
-                A2MDividerLine(inset = 14.dp)
                 A2MSettingSwitchRow(
                     icon = Icons.Filled.Shield,
                     title = "Autoriser le contournement du VPN",
@@ -229,18 +202,17 @@ fun A2MSettingsConnectionScreen(
 
         item {
             A2MSettingsNotice(
-                "Ces préférences sont enregistrées. Le service VPN actuel reste actif en " +
-                    "arrière-plan. La reconnexion automatique, le timeout et le comportement " +
-                    "en arrière-plan sont mémorisés mais ne sont pas encore appliqués au " +
-                    "cycle de vie du tunnel : aucun effet n'est simulé. La notification " +
-                    "dynamique et le contournement VPN sont, eux, réellement appliqués.",
+                "La notification dynamique, le timeout des tests TCP et le contournement " +
+                    "VPN sont réellement appliqués. Les options de reconnexion automatique " +
+                    "et de comportement en arrière-plan ont été retirées : elles n'étaient " +
+                    "pas raccordées au moteur.",
             )
         }
     }
 
     if (showTimeoutDialog) {
         A2MChoiceDialog(
-            title = "Timeout de connexion",
+            title = "Timeout des tests TCP",
             options = timeoutChoices(),
             selected = timeoutSec.toString(),
             onDismiss = { showTimeoutDialog = false },
@@ -248,34 +220,6 @@ fun A2MSettingsConnectionScreen(
                 timeoutSec = value.toInt()
                 Settings.connectionTimeoutSec = value.toInt()
                 showTimeoutDialog = false
-            },
-        )
-    }
-
-    if (showDelayDialog) {
-        A2MChoiceDialog(
-            title = "Délai de reconnexion",
-            options = reconnectDelayChoices(),
-            selected = reconnectDelaySec.toString(),
-            onDismiss = { showDelayDialog = false },
-            onSelect = { value ->
-                reconnectDelaySec = value.toInt()
-                Settings.reconnectDelaySec = value.toInt()
-                showDelayDialog = false
-            },
-        )
-    }
-
-    if (showBackgroundDialog) {
-        A2MChoiceDialog(
-            title = "Comportement en arrière-plan",
-            options = backgroundBehaviorChoices(),
-            selected = backgroundBehavior,
-            onDismiss = { showBackgroundDialog = false },
-            onSelect = { value ->
-                backgroundBehavior = value
-                Settings.backgroundBehavior = value
-                showBackgroundDialog = false
             },
         )
     }
@@ -413,6 +357,13 @@ fun A2MSettingsDnsScreen(
                         onValueChange = { remoteServer = it },
                         placeholder = "1.1.1.1",
                     )
+                    if (remoteServer.isBlank()) {
+                        Text(
+                            text = "Serveur vide : le DNS personnalisé ne sera pas appliqué.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf(
                             "Cloudflare" to "1.1.1.1",
@@ -444,6 +395,13 @@ fun A2MSettingsDnsScreen(
                         onValueChange = { bootstrapServer = it },
                         placeholder = "1.1.1.1",
                     )
+                    if (bootstrapServer.isBlank()) {
+                        Text(
+                            text = "Bootstrap vide : le nom du serveur ne pourra pas être résolu.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     Text(
                         text =
                         "Résout uniquement le nom du serveur de configuration, hors du tunnel.\n\n" +

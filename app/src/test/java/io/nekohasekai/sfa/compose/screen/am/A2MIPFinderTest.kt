@@ -48,6 +48,21 @@ class A2MIPFinderTest {
     }
 
     @Test
+    fun validationAcceptsDefaultAndCommonRules() {
+        assertTrue(validateIpRules("").isEmpty())
+        assertTrue(validateIpRules("^10.21 ; $77 ; =1.2.3.4 ; 10.165").isEmpty())
+        assertTrue(validateIpRules("10.204;10.205\n10.206").isEmpty())
+    }
+
+    @Test
+    fun validationRejectsMalformedRules() {
+        assertFalse(validateIpRules("abc").isEmpty())
+        assertFalse(validateIpRules("10.999").isEmpty())
+        assertFalse(validateIpRules("10.21.1.2.3").isEmpty())
+        assertFalse(validateIpRules("2001:db8::1").isEmpty())
+    }
+
+    @Test
     fun defaultIpListIsEmbeddedAndUsedWhenCustomIsBlank() {
         val default = parseIpRules(DEFAULT_IP_RULES)
         assertEquals(57, default.size)

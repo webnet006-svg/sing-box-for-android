@@ -2,40 +2,54 @@ package io.nekohasekai.sfa.compose.screen.am
 
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EditNote
-import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -53,20 +67,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.nekohasekai.sfa.bg.UpdateProfileWork
 import io.nekohasekai.sfa.compose.screen.configuration.ProfileImportHandler
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardViewModel
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
 import io.nekohasekai.sfa.dams.importer.ClipboardImporter
+import io.nekohasekai.sfa.dams.importer.ShareExport
 import io.nekohasekai.sfa.database.Profile
 import io.nekohasekai.sfa.database.ProfileManager
 import io.nekohasekai.sfa.database.TypedProfile
+import java.io.File
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -75,7 +94,10 @@ import kotlinx.coroutines.withContext
  *
  * - liste réelle des profils enregistrés (DashboardViewModel + base Room)
  * - sélection branchée sur le moteur (Settings.selectedProfile + serviceReload)
- * - suppression
+ * - test TCP individuel et test global avec progression/arrêt
+ * - multi-sélection : test, export, suppression
+ * - appui long : menu contextuel (tester, modifier, partager, sélectionner, supprimer)
+ * - filtre protocole, tri, affichage liste/grille/tableau, tailles S/M/L
  * - import depuis un fichier, un lien ou le presse-papiers
  *   (ProfilImportHandler / ClipboardImporter existants, aucune logique dupliquée)
  */
@@ -95,12 +117,26 @@ fun A2MServersScreen(
     val clipboardImporter = remember { ClipboardImporter(context) }
 
     var pendingDelete by remember { mutableStateOf<Profile?>(null) }
+    var pendingBulkDelete by remember { mutableStateOf(false) }
     var protocols by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
     var codes by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
     var addresses by remember { mutableStateOf<Map<Long, String?>>(emptyMap()) }
     var searchQuery by remember { mutableStateOf("") }
+    var protocolFilter by remember { mutableStateOf<String?>(null) }
+    var sort by remember { mutableStateOf(ServerSort.NAME) }
+    var viewMode by remember { mutableStateOf(ServerViewMode.LIST) }
+    var serverSize by remember { mutableStateOf(ServerSize.MEDIUM) }
+    var selectionMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var contextTarget by remember { mutableStateOf<Profile?>(null) }
     var testResults by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
     var testingIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var testAllJob by remember { mutableStateOf<Job?>(null) }
+    var testAllRunning by remember { mutableStateOf(false) }
+    var testAllDone by remember { mutableStateOf(0) }
+    var testAllTotal by remember { mutableStateOf(0) }
+    var showSortDialog by remember { mutableStateOf(false) }
+    var showViewDialog by remember { mutableStateOf(false) }
 
     var showImportSheet by remember { mutableStateOf(false) }
     var showLinkDialog by remember { mutableStateOf(false) }
@@ -112,13 +148,32 @@ fun A2MServersScreen(
 
     LaunchedEffect(uiState.profiles) {
         val profiles = uiState.profiles
-        withContext(Dispatchers.IO) {
-            protocols =
-                profiles.associate { it.id to A2MProfileInfo.protocolLabel(it) }
-            codes =
-                profiles.associate { it.id to A2MProfileInfo.protocolCode(it) }
-            addresses =
-                profiles.associate { it.id to A2MProfileInfo.serverAddress(it) }
+        val maps =
+            withContext(Dispatchers.IO) {
+                Triple(
+                    profiles.associate { it.id to A2MProfileInfo.protocolLabel(it) },
+                    profiles.associate { it.id to A2MProfileInfo.protocolCode(it) },
+                    profiles.associate { it.id to A2MProfileInfo.serverAddress(it) },
+                )
+            }
+        protocols = maps.first
+        codes = maps.second
+        addresses = maps.third
+        val ids = profiles.map { it.id }.toSet()
+        selectedIds = selectedIds.intersect(ids)
+        if (selectedIds.isEmpty()) selectionMode = false
+    }
+
+    val protocolOptions =
+        remember(uiState.profiles, protocols) {
+            uiState.profiles.mapNotNull { protocols[it.id] }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .sorted()
+        }
+    LaunchedEffect(protocolOptions) {
+        if (protocolFilter != null && protocolFilter !in protocolOptions) {
+            protocolFilter = null
         }
     }
 
@@ -128,7 +183,6 @@ fun A2MServersScreen(
             when (val outcome = clipboardImporter.importText(text)) {
                 is ClipboardImporter.Outcome.Success -> {
                     importMessage = importSummary(outcome.result)
-                    // Ne proposer l'abonnement que si aucun serveur n'a été extrait du texte.
                     subscriptionUrl =
                         outcome.result.subscriptionUrl.takeIf { outcome.result.profiles.isEmpty() }
                 }
@@ -163,23 +217,55 @@ fun A2MServersScreen(
      * réels de la configuration ; la durée d'établissement (résolution DNS
      * incluse) est affichée. Échec honnête si la connexion ne s'établit pas.
      */
+    suspend fun tcpResult(profile: Profile): String {
+        val target = withContext(Dispatchers.IO) { A2MProfileInfo.serverAddressAndPort(profile) }
+        return if (target == null) {
+            "Adresse inconnue"
+        } else {
+            when (val ms = A2MProfileInfo.tcpPing(target.first, target.second)) {
+                null -> "Échec"
+                else -> "TCP $ms ms"
+            }
+        }
+    }
+
     fun testProfile(profile: Profile) {
         coroutineScope.launch {
             testingIds = testingIds + profile.id
-            val target =
-                withContext(Dispatchers.IO) { A2MProfileInfo.serverAddressAndPort(profile) }
-            val result =
-                if (target == null) {
-                    "Adresse inconnue"
-                } else {
-                    when (val ms = A2MProfileInfo.tcpPing(target.first, target.second)) {
-                        null -> "Échec"
-                        else -> "TCP $ms ms"
-                    }
-                }
+            val result = tcpResult(profile)
             testResults = testResults + (profile.id to result)
             testingIds = testingIds - profile.id
         }
+    }
+
+    fun testProfiles(targets: List<Profile>) {
+        if (targets.isEmpty() || testAllRunning) return
+        testAllRunning = true
+        testAllDone = 0
+        testAllTotal = targets.size
+        testAllJob =
+            coroutineScope.launch {
+                try {
+                    for (profile in targets) {
+                        if (!isActive) break
+                        testingIds = testingIds + profile.id
+                        val result = tcpResult(profile)
+                        testResults = testResults + (profile.id to result)
+                        testingIds = testingIds - profile.id
+                        testAllDone++
+                    }
+                } finally {
+                    testingIds = testingIds - targets.map { it.id }.toSet()
+                    testAllRunning = false
+                    testAllJob = null
+                }
+            }
+    }
+
+    fun stopTestAll() {
+        testAllJob?.cancel()
+        testAllJob = null
+        testAllRunning = false
     }
 
     /** Ouvre la feuille d'export (liens partageables, QR) d'un profil local. */
@@ -187,7 +273,7 @@ fun A2MServersScreen(
         coroutineScope.launch {
             val text =
                 withContext(Dispatchers.IO) {
-                    runCatching { java.io.File(profile.typed.path).readText() }.getOrNull()
+                    runCatching { File(profile.typed.path).readText() }.getOrNull()
                 }
             if (text.isNullOrBlank()) {
                 importMessage = "Rien à exporter : configuration vide"
@@ -197,6 +283,15 @@ fun A2MServersScreen(
         }
     }
 
+    fun shareText(text: String, title: String) {
+        val send =
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, text)
+            }
+        context.startActivity(Intent.createChooser(send, title))
+    }
+
     /** Partage réel : lien d'abonnement (distant) ou contenu de la config (local). */
     fun shareProfile(profile: Profile) {
         coroutineScope.launch(Dispatchers.IO) {
@@ -204,22 +299,66 @@ fun A2MServersScreen(
                 when (profile.typed.type) {
                     TypedProfile.Type.Remote -> profile.typed.remoteURL.takeIf { it.isNotBlank() }
                     else -> null
-                } ?: runCatching { java.io.File(profile.typed.path).readText() }.getOrNull()
+                } ?: runCatching { File(profile.typed.path).readText() }.getOrNull()
             withContext(Dispatchers.Main) {
                 if (text.isNullOrBlank()) {
                     importMessage = "Rien à partager : configuration vide"
                 } else {
-                    val send =
-                        android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(android.content.Intent.EXTRA_TEXT, text)
-                        }
-                    context.startActivity(
-                        android.content.Intent.createChooser(send, "Partager « ${profile.name} »"),
-                    )
+                    shareText(text, "Partager « ${profile.name} »")
                 }
             }
         }
+    }
+
+    /** Export groupé : un lien A2M autonome par configuration, partageable en un seul texte. */
+    fun exportProfiles(targets: List<Profile>) {
+        coroutineScope.launch {
+            val sections =
+                withContext(Dispatchers.IO) {
+                    targets.mapNotNull { profile ->
+                        val config =
+                            runCatching { File(profile.typed.path).readText() }
+                                .getOrNull()
+                                ?.takeIf { it.isNotBlank() }
+                                ?: return@mapNotNull null
+                        val link = runCatching { ShareExport.codedLink(config) }.getOrNull()
+                            ?: return@mapNotNull null
+                        "=== ${profile.name} ===\n$link"
+                    }
+                }
+            if (sections.isEmpty()) {
+                importMessage = "Rien à exporter : configurations vides"
+            } else {
+                shareText(
+                    "A2M TUN — export de ${sections.size} serveur(s)\n\n" +
+                        sections.joinToString("\n\n"),
+                    "Exporter les serveurs",
+                )
+            }
+        }
+    }
+
+    fun toggleSelection(profile: Profile) {
+        val next =
+            if (profile.id in selectedIds) {
+                selectedIds - profile.id
+            } else {
+                selectedIds + profile.id
+            }
+        selectedIds = next
+        if (next.isEmpty()) selectionMode = false
+    }
+
+    fun enterSelection(profile: Profile) {
+        selectionMode = true
+        selectedIds = selectedIds + profile.id
+    }
+
+    fun deleteSelected(targets: List<Profile>) {
+        targets.forEach { dashboardViewModel.deleteProfile(it) }
+        selectedIds = emptySet()
+        selectionMode = false
+        pendingBulkDelete = false
     }
 
     val fileLauncher =
@@ -238,6 +377,52 @@ fun A2MServersScreen(
             }
         }
 
+    fun select(profile: Profile) {
+        if (profile.id != uiState.selectedProfileId) {
+            dashboardViewModel.selectProfile(profile.id)
+        }
+    }
+
+    val query = searchQuery.trim()
+    val filteredProfiles =
+        uiState.profiles.filter { profile ->
+            val matchesQuery =
+                query.isEmpty() ||
+                    profile.name.contains(query, ignoreCase = true) ||
+                    (protocols[profile.id] ?: "").contains(query, ignoreCase = true) ||
+                    (addresses[profile.id] ?: "").contains(query, ignoreCase = true)
+            val matchesProtocol = protocolFilter == null || protocols[profile.id] == protocolFilter
+            matchesQuery && matchesProtocol
+        }
+    fun statusRank(profile: Profile): Int {
+        val result = testResults[profile.id]
+        return when {
+            profile.id == uiState.selectedProfileId -> 0
+            result?.startsWith("TCP") == true -> 1
+            result == null -> 2
+            else -> 3
+        }
+    }
+    val sortedProfiles =
+        when (sort) {
+            ServerSort.NAME -> filteredProfiles.sortedBy { it.name.lowercase(Locale.getDefault()) }
+            ServerSort.PROTOCOL ->
+                filteredProfiles.sortedWith(
+                    compareBy(
+                        { protocols[it.id] ?: "" },
+                        { it.name.lowercase(Locale.getDefault()) },
+                    ),
+                )
+            ServerSort.STATUS ->
+                filteredProfiles.sortedWith(
+                    compareBy(
+                        { statusRank(it) },
+                        { it.name.lowercase(Locale.getDefault()) },
+                    ),
+                )
+        }
+    val selectedProfiles = uiState.profiles.filter { it.id in selectedIds }
+
     Box(
         modifier =
         modifier
@@ -255,7 +440,10 @@ fun A2MServersScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         Text(
                             text = "Serveurs",
                             style = MaterialTheme.typography.titleLarge,
@@ -267,10 +455,27 @@ fun A2MServersScreen(
                             if (uiState.profiles.isEmpty()) {
                                 "Aucune configuration enregistrée"
                             } else {
-                                "${uiState.profiles.size} configuration(s) · ${uiState.selectedProfileName ?: "aucune sélectionnée"}"
+                                "${uiState.profiles.size} configuration(s) · " +
+                                    "${uiState.selectedProfileName ?: "aucune sélectionnée"}"
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             color = A2MColors.Muted,
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            if (selectionMode) {
+                                selectionMode = false
+                                selectedIds = emptySet()
+                            } else {
+                                selectionMode = true
+                            }
+                        },
+                    ) {
+                        Icon(
+                            imageVector = if (selectionMode) Icons.Filled.Close else Icons.Filled.Checklist,
+                            contentDescription = if (selectionMode) "Annuler la sélection" else "Sélectionner",
+                            tint = if (selectionMode) A2MColors.Accent else A2MColors.Muted,
                         )
                     }
                     IconButton(
@@ -287,71 +492,270 @@ fun A2MServersScreen(
             }
 
             if (uiState.profiles.isEmpty()) {
-                item {
-                    EmptyServersCard(onImport = { showImportSheet = true })
-                }
+                item { EmptyServersCard(onImport = { showImportSheet = true }) }
             } else {
+                if (selectionMode) {
+                    item {
+                        Column(
+                            modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(A2MShapes.card)
+                                .background(A2MColors.CardBrush)
+                                .border(1.dp, A2MColors.CardBorderSelected, A2MShapes.card)
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "${selectedIds.size} sélectionné(s)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = A2MColors.Text,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                TextButton(
+                                    onClick = {
+                                        selectedIds = filteredProfiles.map { it.id }.toSet()
+                                    },
+                                ) {
+                                    Text("Tout", color = A2MColors.Accent)
+                                }
+                                TextButton(
+                                    onClick = {
+                                        selectedIds = emptySet()
+                                        selectionMode = false
+                                    },
+                                ) {
+                                    Text("Annuler", color = A2MColors.Muted)
+                                }
+                            }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            ) {
+                                A2MServerActionChip(
+                                    label = "Tester",
+                                    icon = Icons.Filled.NetworkCheck,
+                                    enabled = selectedProfiles.isNotEmpty(),
+                                    onClick = { testProfiles(selectedProfiles) },
+                                )
+                                A2MServerActionChip(
+                                    label = "Exporter",
+                                    icon = Icons.Filled.Share,
+                                    enabled = selectedProfiles.isNotEmpty(),
+                                    onClick = { exportProfiles(selectedProfiles) },
+                                )
+                                A2MServerActionChip(
+                                    label = "Supprimer",
+                                    icon = Icons.Filled.Delete,
+                                    danger = true,
+                                    enabled = selectedProfiles.isNotEmpty(),
+                                    onClick = { pendingBulkDelete = true },
+                                )
+                            }
+                        }
+                    }
+                }
+
                 item {
-                    // Recherche façon SniTunnel : filtre par nom, protocole ou adresse.
                     A2MSearchField(
                         query = searchQuery,
                         onQueryChange = { searchQuery = it },
                         placeholder = "Rechercher une config",
                     )
                 }
-                val query = searchQuery.trim()
-                val filteredProfiles =
-                    if (query.isEmpty()) {
-                        uiState.profiles
-                    } else {
-                        uiState.profiles.filter { profile ->
-                            profile.name.contains(query, ignoreCase = true) ||
-                                (protocols[profile.id] ?: "").contains(query, ignoreCase = true) ||
-                                (addresses[profile.id] ?: "").contains(query, ignoreCase = true)
+
+                item {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    ) {
+                        A2MServerActionChip(
+                            label =
+                            if (testAllRunning) {
+                                "Arrêter $testAllDone/$testAllTotal"
+                            } else {
+                                "Tester tout"
+                            },
+                            icon = if (testAllRunning) Icons.Filled.Stop else Icons.Filled.NetworkCheck,
+                            danger = testAllRunning,
+                            enabled = testAllRunning || sortedProfiles.isNotEmpty(),
+                            onClick = {
+                                if (testAllRunning) stopTestAll() else testProfiles(sortedProfiles)
+                            },
+                        )
+                        A2MServerActionChip(
+                            label = "Tri : ${sort.label}",
+                            onClick = { showSortDialog = true },
+                        )
+                        A2MServerActionChip(
+                            label = "Vue : ${viewMode.label}",
+                            onClick = { showViewDialog = true },
+                        )
+                        A2MServerActionChip(
+                            label = "Taille : ${serverSize.label}",
+                            onClick = { serverSize = serverSize.next() },
+                        )
+                    }
+                }
+
+                if (protocolOptions.isNotEmpty()) {
+                    item {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        ) {
+                            A2MServerActionChip(
+                                label = "Tous",
+                                selected = protocolFilter == null,
+                                onClick = { protocolFilter = null },
+                            )
+                            protocolOptions.forEach { protocol ->
+                                A2MServerActionChip(
+                                    label = protocol,
+                                    selected = protocolFilter == protocol,
+                                    onClick = {
+                                        protocolFilter =
+                                            if (protocolFilter == protocol) null else protocol
+                                    },
+                                )
+                            }
                         }
                     }
+                }
+
+                if (testAllRunning) {
+                    item {
+                        Column(
+                            modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(A2MShapes.card)
+                                .background(A2MColors.CardBrush)
+                                .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = "Test TCP global : $testAllDone / $testAllTotal",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = A2MColors.Text,
+                            )
+                            LinearProgressIndicator(
+                                progress = {
+                                    if (testAllTotal > 0) {
+                                        (testAllDone.toFloat() / testAllTotal).coerceIn(0f, 1f)
+                                    } else {
+                                        0f
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Text(
+                                text = "Les tests sont séquentiels et peuvent être arrêtés à tout moment.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = A2MColors.Muted,
+                            )
+                        }
+                    }
+                }
+
                 if (filteredProfiles.isEmpty()) {
                     item {
                         Text(
-                            text = "Aucune config ne correspond à « $query »",
+                            text =
+                            if (query.isNotEmpty()) {
+                                "Aucune config ne correspond à « $query »"
+                            } else {
+                                "Aucune config pour ce protocole"
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = A2MColors.Muted,
                             modifier = Modifier.padding(vertical = 8.dp),
                         )
                     }
                 }
-                items(filteredProfiles, key = { it.id }) { profile ->
-                    ServerRow(
-                        profile = profile,
-                        protocol = protocols[profile.id] ?: A2MProfileInfo.typeLabel(profile),
-                        code = codes[profile.id] ?: "",
-                        address = addresses[profile.id],
-                        selected = profile.id == uiState.selectedProfileId,
-                        autoUpdateEnabled =
-                        if (profile.typed.type == TypedProfile.Type.Remote) {
-                            profile.typed.autoUpdate
-                        } else {
-                            null
-                        },
-                        onToggleAutoUpdate = { toggleAutoUpdate(profile) },
-                        onClick = {
-                            if (profile.id != uiState.selectedProfileId) {
-                                dashboardViewModel.selectProfile(profile.id)
+
+                if (viewMode == ServerViewMode.GRID) {
+                    items(
+                        sortedProfiles.chunked(2),
+                        key = { chunk -> chunk.joinToString("-") { it.id.toString() } },
+                    ) { chunk ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            chunk.forEach { profile ->
+                                ServerGridCard(
+                                    profile = profile,
+                                    protocol = protocols[profile.id] ?: A2MProfileInfo.typeLabel(profile),
+                                    code = codes[profile.id] ?: "",
+                                    address = addresses[profile.id],
+                                    selected = profile.id == uiState.selectedProfileId,
+                                    selectionMode = selectionMode,
+                                    checked = profile.id in selectedIds,
+                                    size = serverSize,
+                                    testResult = testResults[profile.id],
+                                    testing = profile.id in testingIds,
+                                    onClick = {
+                                        if (selectionMode) toggleSelection(profile) else select(profile)
+                                    },
+                                    onLongClick = { contextTarget = profile },
+                                    onMenu = { contextTarget = profile },
+                                    modifier = Modifier.weight(1f),
+                                )
                             }
-                        },
-                        onDelete = { pendingDelete = profile },
-                        onShare = {
-                            if (profile.typed.type == TypedProfile.Type.Local) {
-                                openExport(profile)
+                            if (chunk.size == 1) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                } else if (viewMode == ServerViewMode.TABLE) {
+                    item { ServerTableHeader() }
+                    items(sortedProfiles, key = { it.id }) { profile ->
+                        ServerTableRow(
+                            profile = profile,
+                            protocol = protocols[profile.id] ?: A2MProfileInfo.typeLabel(profile),
+                            selected = profile.id == uiState.selectedProfileId,
+                            selectionMode = selectionMode,
+                            checked = profile.id in selectedIds,
+                            testResult = testResults[profile.id],
+                            testing = profile.id in testingIds,
+                            onClick = {
+                                if (selectionMode) toggleSelection(profile) else select(profile)
+                            },
+                            onLongClick = { contextTarget = profile },
+                        )
+                    }
+                } else {
+                    items(sortedProfiles, key = { it.id }) { profile ->
+                        ServerRow(
+                            profile = profile,
+                            protocol = protocols[profile.id] ?: A2MProfileInfo.typeLabel(profile),
+                            code = codes[profile.id] ?: "",
+                            address = addresses[profile.id],
+                            selected = profile.id == uiState.selectedProfileId,
+                            autoUpdateEnabled =
+                            if (profile.typed.type == TypedProfile.Type.Remote) {
+                                profile.typed.autoUpdate
                             } else {
-                                shareProfile(profile)
-                            }
-                        },
-                        onEdit = { onEditProfile(profile.id) },
-                        testResult = testResults[profile.id],
-                        testing = profile.id in testingIds,
-                        onTest = { testProfile(profile) },
-                    )
+                                null
+                            },
+                            onToggleAutoUpdate = { toggleAutoUpdate(profile) },
+                            selectionMode = selectionMode,
+                            checked = profile.id in selectedIds,
+                            size = serverSize,
+                            testResult = testResults[profile.id],
+                            testing = profile.id in testingIds,
+                            onClick = {
+                                if (selectionMode) toggleSelection(profile) else select(profile)
+                            },
+                            onLongClick = { contextTarget = profile },
+                            onMenu = { contextTarget = profile },
+                        )
+                    }
                 }
             }
         }
@@ -378,7 +782,7 @@ fun A2MServersScreen(
                     color = A2MColors.Text,
                 )
                 ImportOption(
-                    icon = Icons.AutoMirrored.Filled.InsertDriveFile,
+                    icon = Icons.Filled.Description,
                     title = "Depuis un fichier",
                     subtitle = "Configuration sing-box (.json)",
                     onClick = {
@@ -425,7 +829,7 @@ fun A2MServersScreen(
                         }
                     },
                 )
-                Box(modifier = Modifier.size(12.dp))
+                Box(modifier = Modifier.height(12.dp))
             }
         }
     }
@@ -502,7 +906,9 @@ fun A2MServersScreen(
                             isImporting = true
                             when (val outcome = clipboardImporter.importSubscription(url, asRemote = true)) {
                                 is ClipboardImporter.Outcome.Success ->
-                                    importMessage = "Abonnement importé : ${outcome.result.profiles.firstOrNull()?.name ?: "ok"}"
+                                    importMessage =
+                                        "Abonnement importé : " +
+                                            "${outcome.result.profiles.firstOrNull()?.name ?: "ok"}"
                                 is ClipboardImporter.Outcome.Error -> importMessage = outcome.message
                             }
                             isImporting = false
@@ -541,6 +947,154 @@ fun A2MServersScreen(
         )
     }
 
+    contextTarget?.let { profile ->
+        ModalBottomSheet(
+            onDismissRequest = { contextTarget = null },
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            containerColor = A2MColors.BackgroundMid,
+            contentColor = A2MColors.Text,
+        ) {
+            Column(
+                modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = profile.name.ifBlank { "Sans nom" },
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = A2MColors.Text,
+                )
+                Text(
+                    text = addresses[profile.id] ?: A2MProfileInfo.typeLabel(profile),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = A2MColors.Muted,
+                )
+                ImportOption(
+                    icon = Icons.Filled.NetworkCheck,
+                    title = "Tester (TCP)",
+                    subtitle = "Vérifie que host:port est joignable",
+                    onClick = {
+                        contextTarget = null
+                        testProfile(profile)
+                    },
+                )
+                ImportOption(
+                    icon = Icons.Filled.Edit,
+                    title = "Modifier",
+                    subtitle = "Éditer les champs du profil local",
+                    onClick = {
+                        contextTarget = null
+                        onEditProfile(profile.id)
+                    },
+                )
+                ImportOption(
+                    icon = Icons.Filled.Share,
+                    title = "Partager / exporter",
+                    subtitle = "Lien, QR ou configuration",
+                    onClick = {
+                        contextTarget = null
+                        if (profile.typed.type == TypedProfile.Type.Local) {
+                            openExport(profile)
+                        } else {
+                            shareProfile(profile)
+                        }
+                    },
+                )
+                ImportOption(
+                    icon = Icons.Filled.CheckCircle,
+                    title = "Sélectionner",
+                    subtitle = "Ajouter à la sélection multiple",
+                    onClick = {
+                        contextTarget = null
+                        enterSelection(profile)
+                    },
+                )
+                ImportOption(
+                    icon = Icons.Filled.Delete,
+                    title = "Supprimer",
+                    subtitle = "Retirer ce serveur de l'application",
+                    onClick = {
+                        contextTarget = null
+                        pendingDelete = profile
+                    },
+                )
+                Box(modifier = Modifier.height(12.dp))
+            }
+        }
+    }
+
+    if (showSortDialog) {
+        AlertDialog(
+            onDismissRequest = { showSortDialog = false },
+            title = { Text("Trier les serveurs", color = A2MColors.Text) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ServerSort.entries.forEach { option ->
+                        TextButton(
+                            onClick = {
+                                sort = option
+                                showSortDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = option.label + if (sort == option) "  ✓" else "",
+                                color = if (sort == option) A2MColors.Accent else A2MColors.Text,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSortDialog = false }) {
+                    Text("Fermer", color = A2MColors.Muted)
+                }
+            },
+        )
+    }
+
+    if (showViewDialog) {
+        AlertDialog(
+            onDismissRequest = { showViewDialog = false },
+            title = { Text("Affichage", color = A2MColors.Text) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ServerViewMode.entries.forEach { option ->
+                        TextButton(
+                            onClick = {
+                                viewMode = option
+                                showViewDialog = false
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = option.label + if (viewMode == option) "  ✓" else "",
+                                color = if (viewMode == option) A2MColors.Accent else A2MColors.Text,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Taille actuelle : ${serverSize.label} " +
+                            "(touchez « Taille » pour changer)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = A2MColors.Muted,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showViewDialog = false }) {
+                    Text("Fermer", color = A2MColors.Muted)
+                }
+            },
+        )
+    }
+
     pendingDelete?.let { profile ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
@@ -568,6 +1122,51 @@ fun A2MServersScreen(
             },
         )
     }
+
+    if (pendingBulkDelete) {
+        AlertDialog(
+            onDismissRequest = { pendingBulkDelete = false },
+            title = { Text("Supprimer la sélection ?", color = A2MColors.Text) },
+            text = {
+                Text(
+                    "${selectedProfiles.size} serveur(s) seront supprimés de l'application. " +
+                        "Cette action est irréversible.",
+                    color = A2MColors.Muted,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { deleteSelected(selectedProfiles) }) {
+                    Text("Supprimer", color = A2MColors.Danger, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingBulkDelete = false }) {
+                    Text("Annuler", color = A2MColors.Muted)
+                }
+            },
+        )
+    }
+}
+
+private enum class ServerViewMode(val label: String) {
+    LIST("Liste"),
+    GRID("Grille"),
+    TABLE("Tableau"),
+}
+
+private enum class ServerSize(val label: String) {
+    SMALL("S"),
+    MEDIUM("M"),
+    LARGE("L"),
+    ;
+
+    fun next(): ServerSize = entries[(ordinal + 1) % entries.size]
+}
+
+private enum class ServerSort(val label: String) {
+    NAME("Nom"),
+    PROTOCOL("Protocole"),
+    STATUS("Statut"),
 }
 
 private fun importSummary(result: ClipboardImporter.Imported): String =
@@ -583,6 +1182,425 @@ private fun importSummary(result: ClipboardImporter.Imported): String =
         }
         if (isEmpty()) append("Aucun contenu importable trouvé")
     }
+
+@Composable
+private fun A2MServerActionChip(
+    label: String,
+    icon: ImageVector? = null,
+    selected: Boolean = false,
+    danger: Boolean = false,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val accent = if (danger) A2MColors.Danger else A2MColors.Accent
+    Row(
+        modifier =
+        Modifier
+            .clip(A2MShapes.chip)
+            .background(if (selected) A2MColors.Tile else A2MColors.BackgroundMid)
+            .border(
+                1.dp,
+                if (selected) accent.copy(alpha = 0.7f) else A2MColors.CardBorder,
+                A2MShapes.chip,
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        icon?.let {
+            Icon(
+                imageVector = it,
+                contentDescription = null,
+                tint = if (enabled) accent else A2MColors.Faint,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = if (enabled) accent else A2MColors.Faint,
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ServerRow(
+    profile: Profile,
+    protocol: String,
+    code: String,
+    address: String?,
+    selected: Boolean,
+    autoUpdateEnabled: Boolean?,
+    onToggleAutoUpdate: () -> Unit,
+    selectionMode: Boolean,
+    checked: Boolean,
+    size: ServerSize,
+    testResult: String?,
+    testing: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onMenu: () -> Unit,
+) {
+    val badgeSize =
+        when (size) {
+            ServerSize.SMALL -> 34.dp
+            ServerSize.MEDIUM -> 42.dp
+            ServerSize.LARGE -> 52.dp
+        }
+    val verticalPadding =
+        when (size) {
+            ServerSize.SMALL -> 8.dp
+            ServerSize.MEDIUM -> 14.dp
+            ServerSize.LARGE -> 18.dp
+        }
+    Row(
+        modifier =
+        Modifier
+            .fillMaxWidth()
+            .clip(A2MShapes.card)
+            .background(A2MColors.CardBrush)
+            .border(
+                width = 1.dp,
+                color = if (selected) A2MColors.CardBorderSelected else A2MColors.CardBorder,
+                shape = A2MShapes.card,
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 16.dp, vertical = verticalPadding),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (selectionMode) {
+            Checkbox(checked = checked, onCheckedChange = { onClick() })
+        }
+        Box(
+            modifier =
+            Modifier
+                .size(badgeSize)
+                .clip(A2MShapes.tile)
+                .background(if (code.isNotBlank()) protocolBadgeColor(code) else A2MColors.Tile),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (code.isNotBlank()) {
+                Text(
+                    text = code,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.VpnKey,
+                    contentDescription = null,
+                    tint = A2MColors.Accent,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = profile.name.ifBlank { "Sans nom" },
+                    style =
+                    if (size == ServerSize.LARGE) {
+                        MaterialTheme.typography.titleLarge
+                    } else {
+                        MaterialTheme.typography.titleMedium
+                    },
+                    fontWeight = FontWeight.Bold,
+                    color = A2MColors.Text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (selected) {
+                    Text(
+                        text = "SÉLECTIONNÉ",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = A2MColors.Accent,
+                        modifier =
+                        Modifier
+                            .clip(A2MShapes.chip)
+                            .background(A2MColors.Tile)
+                            .border(1.dp, A2MColors.Accent.copy(alpha = 0.5f), A2MShapes.chip)
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+            }
+            Text(
+                text = address?.takeIf { it.isNotBlank() } ?: "$protocol · ${A2MProfileInfo.typeLabel(profile)}",
+                style =
+                if (size == ServerSize.SMALL) {
+                    MaterialTheme.typography.labelSmall
+                } else {
+                    MaterialTheme.typography.bodySmall
+                },
+                color = A2MColors.Muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (testResult != null || testing) {
+                Text(
+                    text = if (testing) "Test en cours…" else "TCP : $testResult",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color =
+                    when {
+                        testing -> A2MColors.Faint
+                        testResult?.endsWith("ms") == true -> A2MColors.Accent
+                        else -> MaterialTheme.colorScheme.error
+                    },
+                )
+            }
+        }
+        autoUpdateEnabled?.let { autoUpdate ->
+            TextButton(onClick = onToggleAutoUpdate) {
+                Text(
+                    text = if (autoUpdate) "MàJ auto" else "MàJ off",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (autoUpdate) A2MColors.Accent else A2MColors.Muted,
+                )
+            }
+        }
+        IconButton(onClick = onMenu) {
+            Icon(
+                imageVector = Icons.Filled.MoreVert,
+                contentDescription = "Actions",
+                tint = A2MColors.Muted,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ServerGridCard(
+    profile: Profile,
+    protocol: String,
+    code: String,
+    address: String?,
+    selected: Boolean,
+    selectionMode: Boolean,
+    checked: Boolean,
+    size: ServerSize,
+    testResult: String?,
+    testing: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onMenu: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val badgeSize =
+        when (size) {
+            ServerSize.SMALL -> 30.dp
+            ServerSize.MEDIUM -> 38.dp
+            ServerSize.LARGE -> 46.dp
+        }
+    Column(
+        modifier =
+        modifier
+            .clip(A2MShapes.card)
+            .background(A2MColors.CardBrush)
+            .border(
+                1.dp,
+                if (selected) A2MColors.CardBorderSelected else A2MColors.CardBorder,
+                A2MShapes.card,
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (selectionMode) {
+                Checkbox(checked = checked, onCheckedChange = { onClick() })
+            } else {
+                Box(
+                    modifier =
+                    Modifier
+                        .size(badgeSize)
+                        .clip(A2MShapes.tile)
+                        .background(if (code.isNotBlank()) protocolBadgeColor(code) else A2MColors.Tile),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = code.ifBlank { "?" },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            if (selected) {
+                Text(
+                    text = "ACTIF",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = A2MColors.Accent,
+                )
+            }
+            IconButton(onClick = onMenu, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.MoreVert,
+                    contentDescription = "Actions",
+                    tint = A2MColors.Muted,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+        Text(
+            text = profile.name.ifBlank { "Sans nom" },
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = A2MColors.Text,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = address?.takeIf { it.isNotBlank() } ?: protocol,
+            style = MaterialTheme.typography.labelSmall,
+            color = A2MColors.Muted,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text =
+            when {
+                testing -> "Test en cours…"
+                testResult != null -> "TCP : $testResult"
+                else -> protocol
+            },
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color =
+            when {
+                testing -> A2MColors.Faint
+                testResult?.endsWith("ms") == true -> A2MColors.Accent
+                testResult != null -> MaterialTheme.colorScheme.error
+                else -> A2MColors.Muted
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun ServerTableHeader() {
+    Row(
+        modifier =
+        Modifier
+            .fillMaxWidth()
+            .clip(A2MShapes.chip)
+            .background(A2MColors.Tile)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "NOM",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = A2MColors.Muted,
+            modifier = Modifier.weight(1.5f),
+        )
+        Text(
+            text = "PROTOCOLE",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = A2MColors.Muted,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = "STATUT",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = A2MColors.Muted,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ServerTableRow(
+    profile: Profile,
+    protocol: String,
+    selected: Boolean,
+    selectionMode: Boolean,
+    checked: Boolean,
+    testResult: String?,
+    testing: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    Row(
+        modifier =
+        Modifier
+            .fillMaxWidth()
+            .clip(A2MShapes.card)
+            .background(A2MColors.CardBrush)
+            .border(
+                1.dp,
+                if (selected) A2MColors.CardBorderSelected else A2MColors.CardBorder,
+                A2MShapes.card,
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (selectionMode) {
+            Checkbox(checked = checked, onCheckedChange = { onClick() })
+        }
+        Text(
+            text = profile.name.ifBlank { "Sans nom" },
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = A2MColors.Text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1.5f),
+        )
+        Text(
+            text = protocol,
+            style = MaterialTheme.typography.labelSmall,
+            color = A2MColors.Muted,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text =
+            when {
+                selected -> "Actif"
+                testing -> "Test…"
+                testResult != null -> testResult
+                else -> "—"
+            },
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color =
+            when {
+                selected -> A2MColors.Accent
+                testing -> A2MColors.Faint
+                testResult?.endsWith("ms") == true -> A2MColors.Accent
+                testResult != null -> MaterialTheme.colorScheme.error
+                else -> A2MColors.Muted
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
 
 @Composable
 private fun ImportOption(
@@ -620,163 +1638,6 @@ private fun ImportOption(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = A2MColors.Muted,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ServerRow(
-    profile: Profile,
-    protocol: String,
-    code: String,
-    address: String?,
-    selected: Boolean,
-    autoUpdateEnabled: Boolean?,
-    onToggleAutoUpdate: () -> Unit,
-    onClick: () -> Unit,
-    onDelete: () -> Unit,
-    onShare: () -> Unit,
-    onEdit: () -> Unit,
-    testResult: String?,
-    testing: Boolean,
-    onTest: () -> Unit,
-) {
-    Row(
-        modifier =
-        Modifier
-            .fillMaxWidth()
-            .clip(A2MShapes.card)
-            .background(A2MColors.CardBrush)
-            .border(
-                width = 1.dp,
-                color = if (selected) A2MColors.CardBorderSelected else A2MColors.CardBorder,
-                shape = A2MShapes.card,
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        // Badge protocole coloré (code court réel : VM, VL, TR…)
-        Box(
-            modifier =
-            Modifier
-                .size(42.dp)
-                .clip(A2MShapes.tile)
-                .background(if (code.isNotBlank()) protocolBadgeColor(code) else A2MColors.Tile),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (code.isNotBlank()) {
-                Text(
-                    text = code,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Filled.VpnKey,
-                    contentDescription = null,
-                    tint = A2MColors.Accent,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-        }
-
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = profile.name.ifBlank { "Sans nom" },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = A2MColors.Text,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                if (selected) {
-                    Text(
-                        text = "SÉLECTIONNÉ",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = A2MColors.Accent,
-                        modifier =
-                        Modifier
-                            .clip(A2MShapes.chip)
-                            .background(A2MColors.Tile)
-                            .border(1.dp, A2MColors.Accent.copy(alpha = 0.5f), A2MShapes.chip)
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                    )
-                }
-            }
-            Text(
-                text = address?.takeIf { it.isNotBlank() } ?: "$protocol · ${A2MProfileInfo.typeLabel(profile)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = A2MColors.Muted,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (testResult != null || testing) {
-                Text(
-                    text =
-                    if (testing) "Test en cours…" else "Tester : $testResult",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color =
-                    when {
-                        testing -> A2MColors.Faint
-                        testResult?.endsWith("ms") == true -> A2MColors.Accent
-                        else -> MaterialTheme.colorScheme.error
-                    },
-                )
-            }
-        }
-
-        autoUpdateEnabled?.let { autoUpdate ->
-            TextButton(onClick = onToggleAutoUpdate) {
-                Text(
-                    text = if (autoUpdate) "MàJ auto" else "MàJ auto off",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = if (autoUpdate) A2MColors.Accent else A2MColors.Muted,
-                )
-            }
-        }
-
-        IconButton(onClick = onTest) {
-            Icon(
-                imageVector = Icons.Filled.NetworkCheck,
-                contentDescription = "Tester",
-                tint = if (testing) A2MColors.Accent else A2MColors.Muted,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-
-        IconButton(onClick = onEdit) {
-            Icon(
-                imageVector = Icons.Filled.Edit,
-                contentDescription = "Modifier",
-                tint = A2MColors.Muted,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-
-        IconButton(onClick = onShare) {
-            Icon(
-                imageVector = Icons.Filled.Share,
-                contentDescription = "Partager",
-                tint = A2MColors.Muted,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-
-        IconButton(onClick = onDelete) {
-            Icon(
-                imageVector = Icons.Filled.Delete,
-                contentDescription = "Supprimer",
-                tint = A2MColors.Muted,
-                modifier = Modifier.size(20.dp),
             )
         }
     }

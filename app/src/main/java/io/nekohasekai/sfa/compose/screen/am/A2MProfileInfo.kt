@@ -1,6 +1,7 @@
 package io.nekohasekai.sfa.compose.screen.am
 
 import io.nekohasekai.sfa.database.Profile
+import io.nekohasekai.sfa.database.Settings
 import io.nekohasekai.sfa.database.TypedProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -141,7 +142,11 @@ internal object A2MProfileInfo {
      * Test TCP réel : ouvre une socket vers host:port et mesure la durée de
      * l'établissement (résolution DNS incluse). Retourne null en échec.
      */
-    suspend fun tcpPing(host: String, port: Int, timeoutMs: Int = 3000): Int? =
+    suspend fun tcpPing(
+        host: String,
+        port: Int,
+        timeoutMs: Int = Settings.connectionTimeoutSec.coerceIn(1, 120) * 1000,
+    ): Int? =
         withContext(Dispatchers.IO) {
             runCatching {
                 val start = System.nanoTime()

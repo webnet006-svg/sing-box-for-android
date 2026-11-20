@@ -123,8 +123,6 @@ fun A2MAntiCensorshipScreen(
     modifier: Modifier = Modifier,
 ) {
     val scaffoldPadding = LocalScaffoldPadding.current
-    var sniEnabled by remember { mutableStateOf(Settings.sniEnabled) }
-    var tlsFragment by remember { mutableStateOf(Settings.tlsFragment) }
 
     Column(
         modifier =
@@ -147,38 +145,13 @@ fun A2MAntiCensorshipScreen(
                 onBack = onBack,
             )
 
-            A2MSettingsGroup(title = "TLS & SNI", icon = Icons.Filled.Security) {
-                A2MSettingSwitchRow(
-                    icon = Icons.Filled.Security,
-                    title = "Optimiser TLS & SNI",
-                    subtitle = "Ajuste le SNI présenté au serveur",
-                    checked = sniEnabled,
-                    onCheckedChange = {
-                        sniEnabled = it
-                        Settings.sniEnabled = it
-                    },
-                )
-                A2MDividerLine(inset = 14.dp)
-                A2MSettingSwitchRow(
-                    icon = Icons.Filled.Bolt,
-                    title = "Fragmentation TLS",
-                    subtitle = "Découpe la poignée de main TLS",
-                    iconTint = A2MColors.AccentUpload,
-                    checked = tlsFragment,
-                    onCheckedChange = {
-                        tlsFragment = it
-                        Settings.tlsFragment = it
-                    },
-                )
-            }
-
             A2MInfoCard(
-                title = "Option mémorisée, non raccordée",
+                title = "Non disponible dans cette version",
                 message =
-                "La fragmentation TLS et l'optimisation SNI sont enregistrées dans l'application " +
-                    "mais ne modifient pas encore la configuration du tunnel. Aucune protection " +
-                    "supplémentaire n'est annoncée à tort : ces options seront raccordées au moteur " +
-                    "dans une phase ultérieure.",
+                "La fragmentation TLS et l'optimisation SNI ne sont pas raccordées au moteur " +
+                    "sing-box de cette version. Les interrupteurs ont donc été retirés : " +
+                    "aucune protection supplémentaire n'est annoncée à tort. Cette page sera " +
+                    "réactivée lorsque le moteur exposera ces options de façon fiable.",
                 icon = Icons.Filled.Info,
             )
         }
@@ -198,7 +171,6 @@ fun A2MAdvancedModesScreen(
     val scaffoldPadding = LocalScaffoldPadding.current
     val notifyApplyChange = rememberApplyServiceChangeNotifier(serviceStatus)
     var adBlock by remember { mutableStateOf(Settings.adBlockEnabled) }
-    var gamingMode by remember { mutableStateOf(Settings.gamingMode) }
 
     Column(
         modifier =
@@ -233,18 +205,6 @@ fun A2MAdvancedModesScreen(
                         notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
                     },
                 )
-                A2MDividerLine(inset = 14.dp)
-                A2MSettingSwitchRow(
-                    icon = Icons.Filled.SportsEsports,
-                    title = "Mode gaming",
-                    subtitle = "Priorité aux jeux",
-                    iconTint = A2MColors.Amber,
-                    checked = gamingMode,
-                    onCheckedChange = {
-                        gamingMode = it
-                        Settings.gamingMode = it
-                    },
-                )
             }
 
             A2MSettingsGroup(title = "Moteur", icon = Icons.Filled.Memory) {
@@ -264,9 +224,9 @@ fun A2MAdvancedModesScreen(
             }
 
             A2MSettingsNotice(
-                "Le bloqueur de publicités est réellement appliqué au routage du tunnel. " +
-                    "Le mode gaming est mémorisé mais n'est pas encore raccordé au moteur : " +
-                    "aucun effet n'est simulé.",
+                "Le bloqueur de publicités est réellement appliqué au routage du tunnel " +
+                    "(règle geosite ads-all). Le mode gaming a été retiré : il n'était pas " +
+                    "raccordé au moteur et aucun effet n'était simulé.",
             )
         }
     }
