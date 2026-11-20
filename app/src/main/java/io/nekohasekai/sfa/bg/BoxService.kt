@@ -37,14 +37,18 @@ import io.nekohasekai.sfa.compose.base.UiEvent
 import io.nekohasekai.sfa.database.ProfileManager
 import io.nekohasekai.sfa.database.Settings
 import io.nekohasekai.sfa.ktx.hasPermission
+import io.nekohasekai.sfa.utils.AppLifecycleObserver
 import io.nekohasekai.sfa.vendor.Vendor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -82,10 +86,14 @@ class BoxService(private val service: Service, private val platformInterface: Pl
     private lateinit var commandServer: CommandServer
     private val idleModeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val idleModeUpdates = Channel<Boolean>(Channel.UNLIMITED)
+    private var lifecycleJob: Job? = null
+    private var backgroundStopJob: Job? = null
+    private var reconnectJob: Job? = null
 
     init {
         idleModeScope.launch {
             for (idle in idleModeUpdates) {
+                if (!::commandServer.isInitialized) continue
                 if (idle) {
                     commandServer.pause()
                 } else {
@@ -93,6 +101,101 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                 }
             }
         }
+    }
+
+    /**
+     * Applique le comportement en arrière-plan choisi par l'utilisateur.
+     * « optimized » suspend les connexions inactives quand l'écran est éteint
+     * et que l'application n'est plus visible ; « stop » arrête le tunnel après
+     * un court délai de grâce. « always » ne change rien.
+     */
+    private fun startLifecycleObserver() {
+        lifecycleJob?.cancel()
+        lifecycleJob =
+            idleModeScope.launch(Dispatchers.Default) {
+                var hadForeground = AppLifecycleObserver.isForeground.value
+                combine(
+                    AppLifecycleObserver.isForeground,
+                    AppLifecycleObserver.isScreenOn,
+                ) { foreground, screenOn -> foreground to screenOn }
+                    .collect { (foreground, screenOn) ->
+                        if (foreground) hadForeground = true
+                        updatePauseState()
+                        if (Settings.backgroundBehavior == "stop" &&
+                            hadForeground &&
+                            !foreground
+                        ) {
+                            scheduleBackgroundStop()
+                        } else {
+                            backgroundStopJob?.cancel()
+                        }
+                    }
+            }
+    }
+
+    private fun updatePauseState() {
+        if (!::commandServer.isInitialized) return
+        val deviceIdle =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                Application.powerManager.isDeviceIdleMode
+        val backgroundPause =
+            Settings.backgroundBehavior == "optimized" &&
+                !AppLifecycleObserver.isForeground.value &&
+                !AppLifecycleObserver.isScreenOn.value
+        idleModeUpdates.trySend(deviceIdle || backgroundPause)
+    }
+
+    private fun scheduleBackgroundStop() {
+        if (backgroundStopJob?.isActive == true) return
+        backgroundStopJob =
+            idleModeScope.launch(Dispatchers.IO) {
+                delay(5_000)
+                if (status.value == Status.Started &&
+                    Settings.backgroundBehavior == "stop" &&
+                    !AppLifecycleObserver.isForeground.value
+                ) {
+                    stopService()
+                }
+            }
+    }
+
+    private fun refreshBackgroundPolicy() {
+        updatePauseState()
+        if (Settings.backgroundBehavior == "stop" &&
+            !AppLifecycleObserver.isForeground.value
+        ) {
+            scheduleBackgroundStop()
+        } else {
+            backgroundStopJob?.cancel()
+        }
+    }
+
+    private fun cancelBackgroundJobs() {
+        lifecycleJob?.cancel()
+        lifecycleJob = null
+        backgroundStopJob?.cancel()
+        backgroundStopJob = null
+        reconnectJob?.cancel()
+        reconnectJob = null
+    }
+
+    /**
+     * Après un changement de réseau, attend le délai choisi puis recharge le
+     * tunnel. Les changements rapprochés annulent le rechargement précédent.
+     */
+    private fun scheduleReconnect() {
+        if (status.value != Status.Started) return
+        val delaySec = Settings.reconnectDelaySec.coerceIn(1, 120)
+        reconnectJob?.cancel()
+        reconnectJob =
+            idleModeScope.launch(Dispatchers.IO) {
+                delay(delaySec * 1_000L)
+                if (status.value != Status.Started) return@launch
+                runCatching { serviceReload0() }
+                    .onFailure {
+                        Log.w(TAG, "Reconnect after network change failed: ${it.message}")
+                    }
+            }
     }
 
     private var receiverRegistered = false
@@ -151,6 +254,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                 notification.show(lastProfileName, R.string.status_starting)
             }
 
+            DefaultNetworkMonitor.setNetworkChangedListener { scheduleReconnect() }
             DefaultNetworkMonitor.start()
 
             // Validation préalable de la configuration (échec propre avant tout démarrage).
@@ -218,6 +322,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                 notification.show(lastProfileName, R.string.status_started)
             }
             notification.start()
+            refreshBackgroundPolicy()
         } catch (e: Exception) {
             stopAndAlert(Alert.StartService, e.message)
             return
@@ -259,6 +364,15 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             } else {
                 null
             }
+        val tls =
+            if (Settings.tlsFragment || !Settings.sniEnabled) {
+                A2MConfigDecorations.TlsOptions(
+                    fragment = Settings.tlsFragment,
+                    sniEnabled = Settings.sniEnabled,
+                )
+            } else {
+                null
+            }
         return A2MConfigDecorations.decorate(
             raw = raw,
             bypassPrivate = Settings.bypassPrivateNetworks,
@@ -266,6 +380,8 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             engine = engine,
             adBlock = Settings.adBlockEnabled,
             hotspotPort = if (Settings.hotspotProxyEnabled) Settings.hotspotProxyPort else null,
+            tls = tls,
+            gaming = Settings.gamingMode,
         )
     }
 
@@ -361,6 +477,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                 return
             }
         }
+        refreshBackgroundPolicy()
     }
 
     override fun getSystemProxyStatus(): SystemProxyStatus? {
@@ -378,15 +495,15 @@ class BoxService(private val service: Service, private val platformInterface: Pl
 
     @RequiresApi(Build.VERSION_CODES.M)
     private fun serviceUpdateIdleMode() {
-        if (::commandServer.isInitialized) {
-            idleModeUpdates.trySend(Application.powerManager.isDeviceIdleMode)
-        }
+        updatePauseState()
     }
 
     @OptIn(DelicateCoroutinesApi::class)
     private fun stopService() {
         if (status.value != Status.Started) return
         status.value = Status.Stopping
+        cancelBackgroundJobs()
+        DefaultNetworkMonitor.setNetworkChangedListener(null)
         if (receiverRegistered) {
             service.unregisterReceiver(receiver)
             receiverRegistered = false
@@ -426,6 +543,8 @@ class BoxService(private val service: Service, private val platformInterface: Pl
     private suspend fun stopAndAlert(type: Alert, message: String? = null) {
         Settings.startedByUser = false
         Settings.dataStore.flush()
+        cancelBackgroundJobs()
+        DefaultNetworkMonitor.setNetworkChangedListener(null)
         val pfd = fileDescriptor
         if (pfd != null) {
             pfd.close()
@@ -471,6 +590,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             )
             receiverRegistered = true
         }
+        startLifecycleObserver()
 
         GlobalScope.launch(Dispatchers.IO) {
             Settings.startedByUser = true
@@ -489,6 +609,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
     internal fun onBind(): IBinder = binder
 
     internal fun onDestroy() {
+        cancelBackgroundJobs()
         idleModeUpdates.cancel()
         idleModeScope.cancel()
         binder.close()

@@ -182,7 +182,7 @@ fun A2MSettingRow(
     }
 }
 
-/** Ligne à interrupteur (option réelle ou mémorisée selon le contexte). */
+/** Ligne à interrupteur pour une option persistée. */
 @Composable
 fun A2MSettingSwitchRow(
     icon: ImageVector?,
@@ -587,7 +587,7 @@ internal fun reconnectDelayChoices(): List<A2MChoiceOption> =
 
 internal fun backgroundBehaviorChoices(): List<A2MChoiceOption> =
     listOf(
-        A2MChoiceOption("always", "Toujours actif", "Le tunnel reste actif"),
-        A2MChoiceOption("optimized", "Optimisé", "Économise la batterie"),
-        A2MChoiceOption("stop", "Arrêt", "Ferme le tunnel en arrière-plan"),
+        A2MChoiceOption("always", "Toujours actif", "Le tunnel reste actif en arrière-plan"),
+        A2MChoiceOption("optimized", "Optimisé", "Suspend les connexions inactives quand l'écran est éteint"),
+        A2MChoiceOption("stop", "Arrêt", "Ferme le tunnel 5 s après le passage en arrière-plan"),
     )

@@ -77,8 +77,9 @@ object Settings {
     /** Thème personnalisé actif, encodé en `.a2mtheme` compact (vide = aucun). */
     var customTheme by dataStore.string(SettingsKey.CUSTOM_THEME) { "" }
 
-    // ── Options persistées dont l'effet moteur n'est pas encore raccordé ──
-    // (notice d'honnêteté affichée dans l'interface ; aucun effet simulé).
+    // ── Options avancées appliquées au moteur / au service ──
+    // TLS et gaming modifient la configuration des sortants ; reconnexion et
+    // comportement en arrière-plan sont lus par BoxService.
     var tlsFragment by dataStore.boolean(SettingsKey.TLS_FRAGMENT) { false }
     var sniEnabled by dataStore.boolean(SettingsKey.SNI_ENABLED) { true }
     var gamingMode by dataStore.boolean(SettingsKey.GAMING_MODE) { false }

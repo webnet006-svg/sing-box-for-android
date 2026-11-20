@@ -139,6 +139,11 @@ fun A2MSettingsConnectionScreen(
     var timeoutSec by remember { mutableStateOf(Settings.connectionTimeoutSec) }
     var showTimeoutDialog by remember { mutableStateOf(false) }
 
+    var reconnectDelaySec by remember { mutableStateOf(Settings.reconnectDelaySec) }
+    var showReconnectDialog by remember { mutableStateOf(false) }
+    var backgroundBehavior by remember { mutableStateOf(Settings.backgroundBehavior) }
+    var showBackgroundDialog by remember { mutableStateOf(false) }
+
     LazyColumn(
         modifier =
         modifier
@@ -185,7 +190,29 @@ fun A2MSettingsConnectionScreen(
         }
 
         item {
-            A2MSettingsGroup(title = "Arrière-plan", icon = Icons.Filled.Shield) {
+            A2MSettingsGroup(title = "Reconnexion et arrière-plan", icon = Icons.Filled.Autorenew) {
+                A2MSettingRow(
+                    icon = Icons.Filled.Autorenew,
+                    title = "Reconnexion après changement de réseau",
+                    subtitle = "Délai avant rechargement du tunnel quand le réseau par défaut change",
+                    value = "$reconnectDelaySec s",
+                    iconTint = A2MColors.Accent,
+                    onClick = { showReconnectDialog = true },
+                )
+                A2MDividerLine(inset = 14.dp)
+                A2MSettingRow(
+                    icon = Icons.Filled.Shield,
+                    title = "Comportement en arrière-plan",
+                    subtitle = "Toujours actif, suspension économique ou arrêt",
+                    value = backgroundBehaviorLabel(backgroundBehavior),
+                    iconTint = A2MColors.Accent,
+                    onClick = { showBackgroundDialog = true },
+                )
+            }
+        }
+
+        item {
+            A2MSettingsGroup(title = "Contournement", icon = Icons.Filled.Shield) {
                 A2MSettingSwitchRow(
                     icon = Icons.Filled.Shield,
                     title = "Autoriser le contournement du VPN",
@@ -202,10 +229,10 @@ fun A2MSettingsConnectionScreen(
 
         item {
             A2MSettingsNotice(
-                "La notification dynamique, le timeout des tests TCP et le contournement " +
-                    "VPN sont réellement appliqués. Les options de reconnexion automatique " +
-                    "et de comportement en arrière-plan ont été retirées : elles n'étaient " +
-                    "pas raccordées au moteur.",
+                "La notification dynamique, le timeout des tests TCP, la reconnexion réseau " +
+                    "et le comportement en arrière-plan sont réellement appliqués. « Optimisé » " +
+                    "suspend les connexions inactives quand l'écran est éteint ; « Arrêt » ferme " +
+                    "le tunnel 5 secondes après le passage de l'application en arrière-plan.",
             )
         }
     }
@@ -220,6 +247,34 @@ fun A2MSettingsConnectionScreen(
                 timeoutSec = value.toInt()
                 Settings.connectionTimeoutSec = value.toInt()
                 showTimeoutDialog = false
+            },
+        )
+    }
+
+    if (showReconnectDialog) {
+        A2MChoiceDialog(
+            title = "Reconnexion après changement de réseau",
+            options = reconnectDelayChoices(),
+            selected = reconnectDelaySec.toString(),
+            onDismiss = { showReconnectDialog = false },
+            onSelect = { value ->
+                reconnectDelaySec = value.toInt()
+                Settings.reconnectDelaySec = value.toInt()
+                showReconnectDialog = false
+            },
+        )
+    }
+
+    if (showBackgroundDialog) {
+        A2MChoiceDialog(
+            title = "Comportement en arrière-plan",
+            options = backgroundBehaviorChoices(),
+            selected = backgroundBehavior,
+            onDismiss = { showBackgroundDialog = false },
+            onSelect = { value ->
+                backgroundBehavior = value
+                Settings.backgroundBehavior = value
+                showBackgroundDialog = false
             },
         )
     }

@@ -195,6 +195,70 @@ class A2MConfigDecorationsTest {
         assertFalse(root.containsKey("log"))
     }
 
+    // ── TLS / SNI ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun tlsOptionsFragmentAndDisableSniOnTlsOutbounds() {
+        val config =
+            """{"outbounds":[""" +
+                """{"type":"vless","tag":"proxy","tls":{"enabled":true,"server_name":"example.com"}},""" +
+                """{"type":"direct","tag":"direct"}]}"""
+        val root = parse(
+            A2MConfigDecorations.withTlsOptions(
+                config,
+                A2MConfigDecorations.TlsOptions(fragment = true, sniEnabled = false),
+            ),
+        )
+        val proxy = root["outbounds"]!!.jsonArray.first { it.jsonObject["tag"]?.jsonPrimitive?.content == "proxy" }.jsonObject
+        val tls = proxy["tls"]!!.jsonObject
+        assertEquals(true, tls["record_fragment"]!!.jsonPrimitive.boolean)
+        assertEquals(true, tls["disable_sni"]!!.jsonPrimitive.boolean)
+
+        val direct = root["outbounds"]!!.jsonArray.first { it.jsonObject["tag"]?.jsonPrimitive?.content == "direct" }.jsonObject
+        assertFalse(direct.containsKey("tls"))
+    }
+
+    @Test
+    fun tlsOptionsReenableSniAndIgnoreDisabledTls() {
+        val config =
+            """{"outbounds":[""" +
+                """{"type":"vless","tag":"proxy","tls":{"enabled":true,"disable_sni":true}},""" +
+                """{"type":"trojan","tag":"off","tls":{"enabled":false,"disable_sni":true}}]}"""
+        val root = parse(
+            A2MConfigDecorations.withTlsOptions(
+                config,
+                A2MConfigDecorations.TlsOptions(fragment = false, sniEnabled = true),
+            ),
+        )
+        val proxyTls = root["outbounds"]!!.jsonArray.first { it.jsonObject["tag"]?.jsonPrimitive?.content == "proxy" }.jsonObject["tls"]!!.jsonObject
+        assertFalse(proxyTls.containsKey("disable_sni"))
+        assertFalse(proxyTls.containsKey("record_fragment"))
+
+        val offTls = root["outbounds"]!!.jsonArray.first { it.jsonObject["tag"]?.jsonPrimitive?.content == "off" }.jsonObject["tls"]!!.jsonObject
+        assertEquals(true, offTls["disable_sni"]!!.jsonPrimitive.boolean)
+    }
+
+    // ── Mode gaming ───────────────────────────────────────────────────────────
+
+    @Test
+    fun gamingModeAddsDialOptionsOnlyToRealOutbounds() {
+        val config =
+            """{"outbounds":[""" +
+                """{"type":"vmess","tag":"proxy","server":"a.com"},""" +
+                """{"type":"selector","tag":"select","outbounds":["proxy"]},""" +
+                """{"type":"direct","tag":"direct"}]}"""
+        val root = parse(A2MConfigDecorations.withGamingMode(config))
+        val proxy = root["outbounds"]!!.jsonArray.first { it.jsonObject["tag"]?.jsonPrimitive?.content == "proxy" }.jsonObject
+        assertEquals(true, proxy["tcp_fast_open"]!!.jsonPrimitive.boolean)
+        assertEquals("30s", proxy["tcp_keep_alive"]!!.jsonPrimitive.content)
+        assertEquals("10s", proxy["tcp_keep_alive_interval"]!!.jsonPrimitive.content)
+
+        val selector = root["outbounds"]!!.jsonArray.first { it.jsonObject["tag"]?.jsonPrimitive?.content == "select" }.jsonObject
+        assertFalse(selector.containsKey("tcp_fast_open"))
+        val direct = root["outbounds"]!!.jsonArray.first { it.jsonObject["tag"]?.jsonPrimitive?.content == "direct" }.jsonObject
+        assertFalse(direct.containsKey("tcp_fast_open"))
+    }
+
     // ── Partage par point d'accès ─────────────────────────────────────────────
 
     @Test
@@ -225,7 +289,8 @@ class A2MConfigDecorationsTest {
     @Test
     fun decorateChainsAllStepsAndFailsIndependently() {
         val config =
-            """{"outbounds":[{"type":"vmess","tag":"proxy"}],"tun":{"mtu":1500},"route":{"rules":[]}}"""
+            """{"outbounds":[{"type":"vmess","tag":"proxy","tls":{"enabled":true}}],""" +
+                """"tun":{"mtu":1500},"route":{"rules":[]}}"""
         val decorated = A2MConfigDecorations.decorate(
             raw = config,
             bypassPrivate = true,
@@ -239,6 +304,8 @@ class A2MConfigDecorationsTest {
             ),
             adBlock = true,
             hotspotPort = null,
+            tls = A2MConfigDecorations.TlsOptions(fragment = true, sniEnabled = false),
+            gaming = true,
         )
         val root = parse(decorated)
         val rules = root["route"]!!.jsonObject["rules"]!!.jsonArray
@@ -248,6 +315,10 @@ class A2MConfigDecorationsTest {
         assertEquals("tls", root["dns"]!!.jsonObject["servers"]!!.jsonArray[0].jsonObject["type"]!!.jsonPrimitive.content)
         assertEquals("mixed", root["tun"]!!.jsonObject["stack"]!!.jsonPrimitive.content)
         assertEquals("warn", root["log"]!!.jsonObject["level"]!!.jsonPrimitive.content)
+        val proxy = root["outbounds"]!!.jsonArray.first { it.jsonObject["tag"]?.jsonPrimitive?.content == "proxy" }.jsonObject
+        assertEquals(true, proxy["tls"]!!.jsonObject["record_fragment"]!!.jsonPrimitive.boolean)
+        assertEquals(true, proxy["tls"]!!.jsonObject["disable_sni"]!!.jsonPrimitive.boolean)
+        assertEquals(true, proxy["tcp_fast_open"]!!.jsonPrimitive.boolean)
     }
 
     @Test

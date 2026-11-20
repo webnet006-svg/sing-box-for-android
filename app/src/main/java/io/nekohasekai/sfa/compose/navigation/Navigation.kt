@@ -299,6 +299,9 @@ fun NavHost(
                 onBack = { navController.popBackStack() },
                 onOpenEngine = { navController.navigate(A2MRoutes.SETTINGS_ENGINE) { launchSingleTop = true } },
                 onOpenHotspot = { navController.navigate(A2MRoutes.SETTINGS_HOTSPOT) { launchSingleTop = true } },
+                onOpenAntiCensorship = {
+                    navController.navigate(A2MRoutes.SETTINGS_ANTI_CENSORSHIP) { launchSingleTop = true }
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }

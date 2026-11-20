@@ -106,8 +106,8 @@ internal fun A2MQuickChip(
         modifier =
         Modifier
             .clip(shape)
-            .background(if (selected) Color.White else Color.Transparent)
-            .border(1.dp, if (selected) Color.White else A2MColors.CardBorder, shape)
+            .background(if (selected) A2MColors.Accent.copy(alpha = 0.16f) else Color.Transparent)
+            .border(1.dp, if (selected) A2MColors.Accent else A2MColors.CardBorder, shape)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
@@ -115,7 +115,7 @@ internal fun A2MQuickChip(
             text = label,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            color = A2MColors.Text,
+            color = if (selected) A2MColors.Accent else A2MColors.Text,
         )
     }
 }

@@ -71,11 +71,10 @@ import android.provider.Settings as AndroidSettings
 /**
  * Écran Paramètres A2M TUN — toutes les entrées agissent sur le moteur réel.
  *
- * Règle d'honnêteté adaptée au projet : les options déjà câblées au moteur
- * (notification dynamique, bloqueur, DNS, MTU, mux, hotspot, routage, logs)
- * restent réelles ; les options non raccordées (fragmentation TLS, SNI, gaming,
- * reconnexion auto) sont persistées et affichées avec une notice explicite —
- * aucun effet n'est simulé.
+ * Toutes les options affichées sont raccordées : notification, bloqueur, DNS,
+ * MTU, mux, hotspot, routage, logs, fragmentation TLS, SNI, gaming, reconnexion
+ * réseau et comportement en arrière-plan. Les changements qui touchent la
+ * configuration demandent un rechargement explicite du tunnel.
  */
 @Composable
 fun A2MSettingsScreen(
@@ -109,15 +108,18 @@ fun A2MSettingsScreen(
     var searchQuery by remember { mutableStateOf("") }
 
     // Options mémorisées (réelles + persistées) lues à chaque recomposition.
+    var dynamicNotification by remember { mutableStateOf(Settings.dynamicNotification) }
     var adBlock by remember { mutableStateOf(Settings.adBlockEnabled) }
+    var gamingMode by remember { mutableStateOf(Settings.gamingMode) }
 
     // Entrées de recherche : destinations réellement accessibles.
     data class Entry(val title: String, val subtitle: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val route: String, val keywords: List<String>)
 
     val entries =
         listOf(
-            Entry("Connexion", "Notification, tests réseau", Icons.Filled.Bolt, A2MRoutes.SETTINGS_CONNECTION, listOf("connexion", "notification", "timeout", "test", "vitesse")),
-            Entry("Modes avancés", "Ad blocker, moteur", Icons.Filled.SportsEsports, A2MRoutes.SETTINGS_ADVANCED, listOf("avancé", "avance", "ad", "bloqueur", "publicité")),
+            Entry("Connexion", "Notification, tests, reconnexion", Icons.Filled.Bolt, A2MRoutes.SETTINGS_CONNECTION, listOf("connexion", "notification", "timeout", "test", "vitesse", "reconnexion", "arrière-plan", "arriere-plan")),
+            Entry("Modes avancés", "Ad blocker, gaming, moteur", Icons.Filled.SportsEsports, A2MRoutes.SETTINGS_ADVANCED, listOf("avancé", "avance", "ad", "bloqueur", "publicité", "gaming", "jeu")),
+            Entry("Anti-censorship", "Fragmentation TLS, SNI", Icons.Filled.Security, A2MRoutes.SETTINGS_ANTI_CENSORSHIP, listOf("anti", "censorship", "tls", "sni", "fragmentation", "fragment")),
             Entry("DNS", "DoH, serveur DNS", Icons.Filled.Dns, A2MRoutes.SETTINGS_DNS, listOf("dns", "doh", "résolution", "serveur")),
             Entry("Routage", "Applications et réseaux", Icons.Filled.Route, A2MRoutes.ROUTING, listOf("routage", "applications", "réseaux", "per", "app")),
             Entry("Moteur réseau", "MTU, mux, pile TUN", Icons.Filled.Memory, A2MRoutes.SETTINGS_ENGINE, listOf("moteur", "mtu", "mux", "pile", "tun", "gvisor")),
@@ -270,8 +272,11 @@ fun A2MSettingsScreen(
                     icon = Icons.Filled.Bolt,
                     title = "Vitesse dans la notification",
                     subtitle = "Affiche le débit réel dans la notification du tunnel",
-                    checked = Settings.dynamicNotification,
-                    onCheckedChange = { Settings.dynamicNotification = it },
+                    checked = dynamicNotification,
+                    onCheckedChange = {
+                        dynamicNotification = it
+                        Settings.dynamicNotification = it
+                    },
                 )
                 A2MDividerLine(inset = 14.dp)
                 A2MSettingRow(
@@ -300,12 +305,24 @@ fun A2MSettingsScreen(
                     },
                 )
                 A2MDividerLine(inset = 14.dp)
+                A2MSettingSwitchRow(
+                    icon = Icons.Filled.SportsEsports,
+                    title = "Mode gaming",
+                    subtitle = "TCP Fast Open + keepalive court sur les sortants (redémarrage)",
+                    checked = gamingMode,
+                    onCheckedChange = {
+                        gamingMode = it
+                        Settings.gamingMode = it
+                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
+                    },
+                )
+                A2MDividerLine(inset = 14.dp)
                 A2MSettingRow(
-                    icon = Icons.Filled.Memory,
-                    title = "Réglages avancés",
-                    subtitle = "MTU, mux, moteur réseau",
+                    icon = Icons.Filled.Security,
+                    title = "Anti-censorship",
+                    subtitle = "Fragmentation TLS et contrôle du SNI",
                     iconTint = A2MColors.Accent,
-                    onClick = { onNavigate(A2MRoutes.SETTINGS_ENGINE) },
+                    onClick = { onNavigate(A2MRoutes.SETTINGS_ANTI_CENSORSHIP) },
                 )
             }
         }
@@ -425,10 +442,10 @@ fun A2MSettingsScreen(
         // ── Notice d'honnêteté (adaptée : la plupart des réglages sont réels) ──
         item {
             A2MSettingsNotice(
-                "Les réglages d'interface et de moteur affichés ici sont actifs et mémorisés. " +
-                    "Trois options avancées (fragmentation TLS, SNI optimisé, mode gaming, reconnexion " +
-                    "automatique) sont mémorisées mais ne sont pas encore appliquées au tunnel : " +
-                    "aucun effet n'est simulé, elles porteront la mention « non raccordé ».",
+                "Les réglages affichés ici sont actifs et mémorisés. La fragmentation TLS, " +
+                    "le contrôle du SNI et le mode gaming modifient la configuration des sortants ; " +
+                    "ils prennent effet au rechargement du tunnel. La reconnexion réseau et le " +
+                    "comportement en arrière-plan sont appliqués par le service.",
             )
         }
     }

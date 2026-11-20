@@ -10,21 +10,41 @@ object DefaultNetworkMonitor {
 
     var defaultNetwork: Network? = null
     private var listener: InterfaceUpdateListener? = null
+    private var networkChangedListener: (() -> Unit)? = null
 
     suspend fun start() {
-        DefaultNetworkListener.start(this) {
-            defaultNetwork = it
-            checkDefaultInterfaceUpdate(it)
+        var started = false
+        var networkWasLost = false
+        DefaultNetworkListener.start(this) { network ->
+            val previous = defaultNetwork
+            defaultNetwork = network
+            checkDefaultInterfaceUpdate(network)
+            if (started && network == null) {
+                networkWasLost = true
+            } else if (started && network != null) {
+                if (networkWasLost || (previous != null && previous != network)) {
+                    networkWasLost = false
+                    networkChangedListener?.invoke()
+                }
+            }
         }
         defaultNetwork = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             Application.connectivity.activeNetwork
         } else {
             DefaultNetworkListener.get()
         }
+        networkWasLost = false
+        started = true
     }
 
     suspend fun stop() {
+        networkChangedListener = null
         DefaultNetworkListener.stop(this)
+    }
+
+    /** Appelé quand l'interface réseau par défaut change réellement. */
+    fun setNetworkChangedListener(listener: (() -> Unit)?) {
+        networkChangedListener = listener
     }
 
     suspend fun require(): Network {

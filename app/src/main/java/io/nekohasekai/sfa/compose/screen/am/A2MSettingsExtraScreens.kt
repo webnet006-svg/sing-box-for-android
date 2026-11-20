@@ -114,7 +114,7 @@ private fun A2MExtraSubScreenHeader(
     }
 }
 
-// ── Anti-censorship (persisté, non raccordé au moteur : notice explicite) ───
+// ── Anti-censorship (fragmentation TLS et SNI réels) ────────────────────────
 
 @Composable
 fun A2MAntiCensorshipScreen(
@@ -123,6 +123,9 @@ fun A2MAntiCensorshipScreen(
     modifier: Modifier = Modifier,
 ) {
     val scaffoldPadding = LocalScaffoldPadding.current
+    val notifyApplyChange = rememberApplyServiceChangeNotifier(serviceStatus)
+    var tlsFragment by remember { mutableStateOf(Settings.tlsFragment) }
+    var sniEnabled by remember { mutableStateOf(Settings.sniEnabled) }
 
     Column(
         modifier =
@@ -145,20 +148,47 @@ fun A2MAntiCensorshipScreen(
                 onBack = onBack,
             )
 
-            A2MInfoCard(
-                title = "Non disponible dans cette version",
-                message =
-                "La fragmentation TLS et l'optimisation SNI ne sont pas raccordées au moteur " +
-                    "sing-box de cette version. Les interrupteurs ont donc été retirés : " +
-                    "aucune protection supplémentaire n'est annoncée à tort. Cette page sera " +
-                    "réactivée lorsque le moteur exposera ces options de façon fiable.",
-                icon = Icons.Filled.Info,
+            A2MSettingsGroup(title = "TLS", icon = Icons.Filled.Security) {
+                A2MSettingSwitchRow(
+                    icon = Icons.Filled.Security,
+                    title = "Fragmentation TLS",
+                    subtitle =
+                    "Ajoute record_fragment aux sortants TLS : le handshake est découpé " +
+                        "en plusieurs enregistrements pour gêner un filtrage SNI simple. " +
+                        "Peut réduire légèrement les performances.",
+                    checked = tlsFragment,
+                    onCheckedChange = {
+                        tlsFragment = it
+                        Settings.tlsFragment = it
+                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
+                    },
+                )
+                A2MDividerLine(inset = 14.dp)
+                A2MSettingSwitchRow(
+                    icon = Icons.Filled.Shield,
+                    title = "Envoyer le SNI",
+                    subtitle =
+                    "Lorsque cette option est désactivée, disable_sni est ajouté aux " +
+                        "sortants TLS. À ne désactiver que si le serveur et le réseau le supportent.",
+                    checked = sniEnabled,
+                    onCheckedChange = {
+                        sniEnabled = it
+                        Settings.sniEnabled = it
+                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
+                    },
+                )
+            }
+
+            A2MSettingsNotice(
+                "Ces options modifient les objets TLS des sortants de la configuration " +
+                    "active. Elles ne concernent que les profils qui utilisent TLS et " +
+                    "prennent effet au prochain rechargement du tunnel.",
             )
         }
     }
 }
 
-// ── Modes avancés (bloqueur réel · gaming mémorisé) ─────────────────────────
+// ── Modes avancés (bloqueur, gaming, moteur) ────────────────────────────────
 
 @Composable
 fun A2MAdvancedModesScreen(
@@ -166,11 +196,13 @@ fun A2MAdvancedModesScreen(
     onBack: () -> Unit,
     onOpenEngine: () -> Unit,
     onOpenHotspot: () -> Unit,
+    onOpenAntiCensorship: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scaffoldPadding = LocalScaffoldPadding.current
     val notifyApplyChange = rememberApplyServiceChangeNotifier(serviceStatus)
     var adBlock by remember { mutableStateOf(Settings.adBlockEnabled) }
+    var gamingMode by remember { mutableStateOf(Settings.gamingMode) }
 
     Column(
         modifier =
@@ -207,6 +239,29 @@ fun A2MAdvancedModesScreen(
                 )
             }
 
+            A2MSettingsGroup(title = "Performance", icon = Icons.Filled.SportsEsports) {
+                A2MSettingSwitchRow(
+                    icon = Icons.Filled.SportsEsports,
+                    title = "Mode gaming",
+                    subtitle =
+                    "Active TCP Fast Open et un keepalive court sur les sortants " +
+                        "(30 s, intervalle 10 s). Redémarrage du tunnel requis.",
+                    checked = gamingMode,
+                    onCheckedChange = {
+                        gamingMode = it
+                        Settings.gamingMode = it
+                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
+                    },
+                )
+                A2MDividerLine(inset = 14.dp)
+                A2MSettingRow(
+                    icon = Icons.Filled.Security,
+                    title = "Anti-censorship",
+                    subtitle = "Fragmentation TLS et SNI",
+                    onClick = onOpenAntiCensorship,
+                )
+            }
+
             A2MSettingsGroup(title = "Moteur", icon = Icons.Filled.Memory) {
                 A2MSettingRow(
                     icon = Icons.Filled.Memory,
@@ -224,9 +279,9 @@ fun A2MAdvancedModesScreen(
             }
 
             A2MSettingsNotice(
-                "Le bloqueur de publicités est réellement appliqué au routage du tunnel " +
-                    "(règle geosite ads-all). Le mode gaming a été retiré : il n'était pas " +
-                    "raccordé au moteur et aucun effet n'était simulé.",
+                "Le bloqueur de publicités et le mode gaming sont réellement appliqués " +
+                    "à la configuration du tunnel. La fragmentation TLS et le contrôle du SNI " +
+                    "sont disponibles dans « Anti-censorship ».",
             )
         }
     }

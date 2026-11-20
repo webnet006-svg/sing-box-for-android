@@ -36,6 +36,12 @@ object A2MConfigDecorations {
         val logLevel: String,
     )
 
+    /** Options TLS appliquées aux sortants : fragmentation et envoi du SNI. */
+    data class TlsOptions(
+        val fragment: Boolean,
+        val sniEnabled: Boolean,
+    )
+
     /**
      * Chaîne complète des décorations, pilotée par des options explicites
      * (lues dans Settings par BoxService.effectiveContent) : chaque étape
@@ -48,11 +54,15 @@ object A2MConfigDecorations {
         engine: EngineOptions?,
         adBlock: Boolean,
         hotspotPort: Int?,
+        tls: TlsOptions? = null,
+        gaming: Boolean = false,
     ): String {
         var content = raw
         if (bypassPrivate) content = runCatching { withBypassPrivateNetworks(content) }.getOrDefault(content)
         if (dns != null) content = runCatching { withDnsOverride(content, dns) }.getOrDefault(content)
         if (engine != null) content = runCatching { withEngine(content, engine) }.getOrDefault(content)
+        if (tls != null) content = runCatching { withTlsOptions(content, tls) }.getOrDefault(content)
+        if (gaming) content = runCatching { withGamingMode(content) }.getOrDefault(content)
         if (hotspotPort != null) content = runCatching { withHotspotProxy(content, hotspotPort) }.getOrDefault(content)
         if (adBlock) content = runCatching { withAdBlock(content) }.getOrDefault(content)
         return content
@@ -236,6 +246,73 @@ object A2MConfigDecorations {
                 )
             }
 
+            encode(root)
+        }.getOrDefault(content)
+
+    // ── Options TLS et gaming ────────────────────────────────────────────────
+
+    /**
+     * Fragmentation TLS et SNI sur tous les sortants qui déclarent un objet TLS.
+     *
+     * `record_fragment` est la méthode recommandée par sing-box : elle découpe
+     * le handshake en plusieurs enregistrements TLS. `disable_sni` est ajouté
+     * quand l'utilisateur choisit de ne pas envoyer le SNI, et retiré sinon.
+     * Les objets TLS explicitement désactivés (`enabled: false`) sont ignorés.
+     */
+    fun withTlsOptions(
+        content: String,
+        options: TlsOptions,
+    ): String =
+        runCatching {
+            val root = parseRoot(content)
+            val outbounds = outboundListOf(root)
+            root["outbounds"] = JsonArray(
+                outbounds.map { element ->
+                    val obj = element as? JsonObject ?: return@map element
+                    val tls = obj["tls"] as? JsonObject ?: return@map element
+                    val enabled = (tls["enabled"] as? JsonPrimitive)?.content != "false"
+                    if (!enabled) return@map element
+
+                    val tlsMutable = tls.toMutableMap()
+                    if (options.fragment) {
+                        tlsMutable["record_fragment"] = JsonPrimitive(true)
+                    }
+                    if (options.sniEnabled) {
+                        tlsMutable.remove("disable_sni")
+                    } else {
+                        tlsMutable["disable_sni"] = JsonPrimitive(true)
+                    }
+
+                    val objMutable = obj.toMutableMap()
+                    objMutable["tls"] = JsonObject(tlsMutable)
+                    JsonObject(objMutable)
+                },
+            )
+            encode(root)
+        }.getOrDefault(content)
+
+    /**
+     * Mode gaming : active TCP Fast Open et un keepalive court sur les sortants
+     * qui dialent réellement (les groupes selector/urltest et les sortants
+     * direct/block/dns sont laissés intacts).
+     */
+    fun withGamingMode(content: String): String =
+        runCatching {
+            val root = parseRoot(content)
+            val outbounds = outboundListOf(root)
+            val ignored = setOf("direct", "block", "dns", "selector", "urltest")
+            root["outbounds"] = JsonArray(
+                outbounds.map { element ->
+                    val type = outboundType(element) ?: return@map element
+                    if (type in ignored) return@map element
+                    val obj = element as? JsonObject ?: return@map element
+                    val mutable = obj.toMutableMap()
+                    mutable["tcp_fast_open"] = JsonPrimitive(true)
+                    mutable["tcp_keep_alive"] = JsonPrimitive("30s")
+                    mutable["tcp_keep_alive_interval"] = JsonPrimitive("10s")
+                    JsonObject(mutable)
+                },
+            )
             encode(root)
         }.getOrDefault(content)
 
