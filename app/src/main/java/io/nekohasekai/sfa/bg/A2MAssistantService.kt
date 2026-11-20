@@ -28,8 +28,8 @@ class A2MVoiceInteractionSessionService : VoiceInteractionSessionService() {
 }
 
 class A2MVoiceInteractionSession(private val appContext: Context) : VoiceInteractionSession(appContext) {
-    override fun onShow(args: Bundle?) {
-        super.onShow(args)
+    override fun onShow(args: Bundle?, showFlags: Int) {
+        super.onShow(args, showFlags)
         runCatching {
             appContext.startActivity(
                 Intent(appContext, MainActivity::class.java).apply {
@@ -56,5 +56,5 @@ class A2MRecognitionService : RecognitionService() {
 
     override fun onStopListening(listener: RecognitionService.Callback?) = Unit
 
-    override fun onCancel() = Unit
+    override fun onCancel(callback: RecognitionService.Callback?) = Unit
 }
