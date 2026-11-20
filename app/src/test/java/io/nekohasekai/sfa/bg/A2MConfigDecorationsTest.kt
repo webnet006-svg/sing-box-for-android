@@ -133,6 +133,18 @@ class A2MConfigDecorationsTest {
     }
 
     @Test
+    fun dnsOverrideKeepsProfileWhenServersBlankOrTypeUnknown() {
+        val config = """{"outbounds":[{"type":"vmess","tag":"proxy"}],"dns":{"servers":[]}}"""
+        listOf(
+            A2MConfigDecorations.DnsOverride(type = "https", remoteServer = "", bootstrapServer = "1.1.1.1"),
+            A2MConfigDecorations.DnsOverride(type = "https", remoteServer = "1.1.1.1", bootstrapServer = " "),
+            A2MConfigDecorations.DnsOverride(type = "doit", remoteServer = "1.1.1.1", bootstrapServer = "1.1.1.1"),
+        ).forEach { override ->
+            assertEquals(config, A2MConfigDecorations.withDnsOverride(config, override))
+        }
+    }
+
+    @Test
     fun dnsOverrideWithoutRouteFinalUsesFirstProxyOutboundAsDetour() {
         val config = """{"outbounds":[{"type":"vmess","tag":"proxy"}]}"""
         val root = parse(
@@ -193,6 +205,24 @@ class A2MConfigDecorationsTest {
         assertEquals(1400, root["tun"]!!.jsonObject["mtu"]!!.jsonPrimitive.content.toInt())
         assertEquals("gvisor", root["tun"]!!.jsonObject["stack"]!!.jsonPrimitive.content)
         assertFalse(root.containsKey("log"))
+    }
+
+    @Test
+    fun engineIgnoresOutOfRangeCustomMtu() {
+        val config = """{"tun":{"mtu":1500}}"""
+        val root = parse(
+            A2MConfigDecorations.withEngine(
+                config,
+                A2MConfigDecorations.EngineOptions(
+                    mtuMode = "custom",
+                    mtuCustom = 0,
+                    stackMode = "auto",
+                    muxEnabled = false,
+                    logLevel = "auto",
+                ),
+            ),
+        )
+        assertEquals(1500, root["tun"]!!.jsonObject["mtu"]!!.jsonPrimitive.content.toInt())
     }
 
     // ── TLS / SNI ─────────────────────────────────────────────────────────────
@@ -269,6 +299,13 @@ class A2MConfigDecorationsTest {
         assertEquals("mixed", inbound["type"]!!.jsonPrimitive.content)
         assertEquals("0.0.0.0", inbound["listen"]!!.jsonPrimitive.content)
         assertEquals(2080, inbound["listen_port"]!!.jsonPrimitive.content.toInt())
+    }
+
+    @Test
+    fun hotspotIgnoresInvalidPort() {
+        val config = """{"outbounds":[{"type":"vmess","tag":"proxy"}]}"""
+        assertEquals(config, A2MConfigDecorations.withHotspotProxy(config, 0))
+        assertEquals(config, A2MConfigDecorations.withHotspotProxy(config, 70000))
     }
 
     @Test

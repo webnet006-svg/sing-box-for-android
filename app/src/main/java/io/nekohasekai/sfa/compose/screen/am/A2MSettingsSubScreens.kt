@@ -870,7 +870,7 @@ fun A2MSettingsEngineScreen(
             "1280" -> "1280"
             "1500" -> "1500"
             "9000" -> "9000"
-            "custom" -> if (mtuCustom > 0) mtuCustom.toString() else "—"
+            "custom" -> if (mtuCustom in 576..65535) mtuCustom.toString() else "—"
             else -> "Auto (profil)"
         }
 
@@ -953,6 +953,13 @@ fun A2MSettingsEngineScreen(
                             placeholder = "1500",
                             number = true,
                         )
+                        if (mtuCustom !in 576..65535) {
+                            Text(
+                                text = "MTU invalide (576 à 65535) : le MTU du profil est conservé.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                 }
             }

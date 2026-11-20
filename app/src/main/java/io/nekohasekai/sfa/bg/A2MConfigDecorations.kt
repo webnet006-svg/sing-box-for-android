@@ -154,6 +154,14 @@ object A2MConfigDecorations {
         override: DnsOverride,
     ): String =
         runCatching {
+            // Un serveur vide ou un type inconnu rendrait la configuration invalide :
+            // on conserve alors le DNS du profil au lieu de casser le tunnel.
+            if (override.type !in setOf("https", "tls", "quic", "udp") ||
+                override.remoteServer.isBlank() ||
+                override.bootstrapServer.isBlank()
+            ) {
+                return@runCatching content
+            }
             val root = parseRoot(content)
             val outbounds = outboundListOf(root)
             val directTag = ensureOutboundOfType(outbounds, "direct")
@@ -214,7 +222,7 @@ object A2MConfigDecorations {
                         "1280" -> 1280
                         "1500" -> 1500
                         "9000" -> 9000
-                        "custom" -> engine.mtuCustom.takeIf { it > 0 }
+                        "custom" -> engine.mtuCustom.takeIf { it in 576..65535 }
                         else -> null
                     }
                 mtu?.let { tunMutable["mtu"] = JsonPrimitive(it) }
@@ -327,6 +335,7 @@ object A2MConfigDecorations {
         port: Int,
     ): String =
         runCatching {
+            if (port !in 1..65535) return@runCatching content
             val root = parseRoot(content)
             val inbounds = (root["inbounds"] as? JsonArray)?.toMutableList() ?: mutableListOf()
             val hotspot = buildJsonObject {
