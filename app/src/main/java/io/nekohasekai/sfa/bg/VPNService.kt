@@ -72,12 +72,17 @@ class VPNService :
         }
 
         val inet4Address = options.inet4Address
+        // The address iterators are single-pass. Keep the family information
+        // before consuming them so the default-route fallback below remains
+        // correct on Android 13+.
+        val hasInet4Address = inet4Address.hasNext()
         while (inet4Address.hasNext()) {
             val address = inet4Address.next()
             builder.addAddress(address.address(), address.prefix())
         }
 
         val inet6Address = options.inet6Address
+        val hasInet6Address = inet6Address.hasNext()
         while (inet6Address.hasNext()) {
             val address = inet6Address.next()
             builder.addAddress(address.address(), address.prefix())
@@ -97,7 +102,7 @@ class VPNService :
                     while (inet4RouteAddress.hasNext()) {
                         builder.addRoute(inet4RouteAddress.next().toIpPrefix())
                     }
-                } else if (options.inet4Address.hasNext()) {
+                } else if (hasInet4Address) {
                     builder.addRoute("0.0.0.0", 0)
                 }
 
@@ -106,7 +111,7 @@ class VPNService :
                     while (inet6RouteAddress.hasNext()) {
                         builder.addRoute(inet6RouteAddress.next().toIpPrefix())
                     }
-                } else if (options.inet6Address.hasNext()) {
+                } else if (hasInet6Address) {
                     builder.addRoute("::", 0)
                 }
 
