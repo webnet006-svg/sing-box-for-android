@@ -161,11 +161,12 @@ class BoxService(private val service: Service, private val platformInterface: Pl
 
     private fun refreshBackgroundPolicy() {
         updatePauseState()
-        if (Settings.backgroundBehavior == "stop" &&
-            !AppLifecycleObserver.isForeground.value
+        // L'arrêt ne se déclenche que sur une vraie transition premier plan → arrière-plan,
+        // gérée par startLifecycleObserver(). Un démarrage depuis l'arrière-plan
+        // (raccourci, automatisation) ne doit pas couper le tunnel immédiatement.
+        if (Settings.backgroundBehavior != "stop" ||
+            AppLifecycleObserver.isForeground.value
         ) {
-            scheduleBackgroundStop()
-        } else {
             backgroundStopJob?.cancel()
         }
     }
