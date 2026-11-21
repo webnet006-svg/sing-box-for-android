@@ -556,8 +556,10 @@ object A2MConfigDecorations {
                     when (engine.mtuMode) {
                         "1280" -> 1280
                         "1500" -> 1500
-                        "9000" -> 9000
-                        "custom" -> engine.mtuCustom.takeIf { it in 576..65535 }
+                        // Android VPN interfaces and mobile networks do not
+                        // negotiate jumbo frames reliably. Keep custom MTU in
+                        // the portable IPv4 range to avoid black-holing traffic.
+                        "custom" -> engine.mtuCustom.takeIf { it in 576..1500 }
                         else -> null
                     }
                 mtu?.let { tunMutable["mtu"] = JsonPrimitive(it) }

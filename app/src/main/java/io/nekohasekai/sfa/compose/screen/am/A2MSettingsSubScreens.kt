@@ -869,8 +869,7 @@ fun A2MSettingsEngineScreen(
         when (mtuMode) {
             "1280" -> "1280"
             "1500" -> "1500"
-            "9000" -> "9000"
-            "custom" -> if (mtuCustom in 576..65535) mtuCustom.toString() else "—"
+            "custom" -> if (mtuCustom in 576..1500) mtuCustom.toString() else "—"
             else -> "Auto (profil)"
         }
 
@@ -928,7 +927,6 @@ fun A2MSettingsEngineScreen(
                     A2MRadioCard("Standard", "1500", mtuMode == "1500", { mtuMode = "1500" }, Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    A2MRadioCard("Élevé", "9000", mtuMode == "9000", { mtuMode = "9000" }, Modifier.weight(1f))
                     A2MRadioCard(
                         "Personnalisé",
                         mtuText.ifBlank { "—" },
@@ -953,9 +951,9 @@ fun A2MSettingsEngineScreen(
                             placeholder = "1500",
                             number = true,
                         )
-                        if (mtuCustom !in 576..65535) {
+                        if (mtuCustom !in 576..1500) {
                             Text(
-                                text = "MTU invalide (576 à 65535) : le MTU du profil est conservé.",
+                                text = "MTU invalide (576 à 1500) : le MTU du profil est conservé.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                             )

@@ -334,6 +334,18 @@ class A2MConfigDecorationsTest {
     }
 
     @Test
+    fun engineRejectsJumboMtu() {
+        val config = """{"tun":{"mtu":1500}}"""
+        val root = parse(
+            A2MConfigDecorations.withEngine(
+                config,
+                A2MConfigDecorations.EngineOptions("custom", 9000, "auto", false, "auto"),
+            ),
+        )
+        assertEquals(1500, root["tun"]!!.jsonObject["mtu"]!!.jsonPrimitive.content.toInt())
+    }
+
+    @Test
     fun engineIgnoresOutOfRangeCustomMtu() {
         val config = """{"tun":{"mtu":1500}}"""
         val root = parse(
