@@ -9,6 +9,7 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import io.nekohasekai.sfa.database.Settings
 
 /**
  * Retour tactile des clics dans les réglages, choisi par l'utilisateur :
@@ -24,7 +25,7 @@ object A2MClickFeedback {
     val sounds = listOf(
         ClickSound("1", "Bip doux", ToneGenerator.TONE_PROP_BEEP),
         ClickSound("2", "Bip clair", ToneGenerator.TONE_PROP_BEEP2),
-        ClickSound("3", "Bip grave", ToneGenerator.TONE_PROP_BEEP3),
+        ClickSound("3", "Note 2", ToneGenerator.TONE_DTMF_2),
         ClickSound("4", "Validation", ToneGenerator.TONE_PROP_ACK),
         ClickSound("5", "Alerte", ToneGenerator.TONE_PROP_NACK),
         ClickSound("6", "Rappel", ToneGenerator.TONE_PROP_PROMPT),
