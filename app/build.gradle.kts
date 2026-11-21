@@ -98,7 +98,14 @@ android {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("release")
+            // CI push builds must remain reproducible even when the private
+            // release keystore secret is unavailable or stale. Play/publish
+            // builds do not set this flag and keep the release key.
+            signingConfig = if (System.getenv("CI_ANDROID_DEBUG_SIGNING") == "true") {
+                signingConfigs.getByName("debug")
+            } else {
+                signingConfigs.getByName("release")
+            }
             vcsInfo.include = false
         }
     }
