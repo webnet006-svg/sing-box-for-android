@@ -3,6 +3,7 @@ package io.nekohasekai.sfa.compose.screen.am
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -61,8 +62,9 @@ object A2MNetworkInfo {
      * WRITE_SECURE_SETTINGS accordée (typiquement via ADB).
      */
     fun canToggleAirplaneMode(context: Context): Boolean =
-        context.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) ==
-            PackageManager.PERMISSION_GRANTED
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+            context.checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) ==
+                PackageManager.PERMISSION_GRANTED
 
     /**
      * Bascule le mode avion si la permission le permet. Retourne false quand
@@ -163,4 +165,3 @@ internal fun validateIpRules(raw: String): List<String> {
     }
     return problems.distinct()
 }
-

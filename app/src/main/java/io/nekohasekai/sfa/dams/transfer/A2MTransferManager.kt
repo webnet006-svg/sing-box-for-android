@@ -159,7 +159,12 @@ object A2MTransferManager {
             try {
                 val code = connection.responseCode
                 if (code !in 200..299) error("Le serveur a répondu HTTP $code")
-                val total = connection.contentLengthLong
+                val total =
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                        connection.contentLengthLong
+                    } else {
+                        connection.contentLength.toLong()
+                    }
                 _progress.value = _progress.value?.copy(total = total)
                 val stream = connection.inputStream
                 val sink =

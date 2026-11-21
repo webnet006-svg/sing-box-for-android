@@ -3,6 +3,7 @@ package io.nekohasekai.sfa.bg
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Build
 import android.service.voice.VoiceInteractionService
 import android.service.voice.VoiceInteractionSession
 import android.service.voice.VoiceInteractionSessionService
@@ -42,7 +43,7 @@ class A2MVoiceInteractionSession(private val appContext: Context) : VoiceInterac
                 },
             )
         }
-        hide()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) hide()
     }
 }
 
