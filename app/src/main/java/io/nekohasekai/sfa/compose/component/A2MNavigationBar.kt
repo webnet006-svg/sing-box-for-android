@@ -1,19 +1,23 @@
 package io.nekohasekai.sfa.compose.component
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Tune
@@ -22,10 +26,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -67,47 +71,70 @@ fun A2MNavigationBar(
             .navigationBarsPadding()
             .padding(horizontal = 18.dp, vertical = 10.dp),
     ) {
-        Row(
+        BoxWithConstraints(
             modifier =
             Modifier
                 .fillMaxWidth()
                 .height(64.dp)
                 .clip(A2M_NAV_PILL_SHAPE)
-                .background(Color(0xF2FFFFFF))
+                .background(Color(0xE8071A38))
                 .border(1.dp, A2MColors.CardBorder, A2M_NAV_PILL_SHAPE)
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(horizontal = 6.dp, vertical = 6.dp),
         ) {
-            A2M_NAV_ITEMS.forEach { item ->
-                val selected = selectedRoute == item.route
-                val interactionSource = remember { MutableInteractionSource() }
-                Column(
-                    modifier =
-                    Modifier
-                        .weight(1f)
-                        .clip(A2M_NAV_PILL_SHAPE)
-                        .background(if (selected) Color(0xFFD9F2EA) else Color.Transparent)
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null,
-                        ) { onNavigate(item.route) }
-                        .padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Icon(
-                        imageVector = item.icon,
-                        contentDescription = item.label,
-                        tint = if (selected) A2MColors.Accent else A2MColors.Faint,
-                        modifier = Modifier.size(22.dp),
+            val selectedIndex = A2M_NAV_ITEMS.indexOfFirst { it.route == selectedRoute }.coerceAtLeast(0)
+            val itemWidth = maxWidth / A2M_NAV_ITEMS.size
+            val indicatorOffset by animateDpAsState(
+                targetValue = itemWidth * selectedIndex,
+                animationSpec = tween(durationMillis = 320),
+                label = "navigationIndicatorOffset",
+            )
+            Box(
+                modifier = Modifier
+                    .offset(x = indicatorOffset)
+                    .size(width = itemWidth, height = maxHeight)
+                    .padding(horizontal = 2.dp, vertical = 1.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(A2MColors.Accent.copy(alpha = 0.22f), Color(0xFF287BFF).copy(alpha = 0.18f)),
+                        ),
                     )
-                    Text(
-                        text = item.label,
-                        fontSize = 11.sp,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (selected) A2MColors.Accent else A2MColors.Faint,
-                        style = MaterialTheme.typography.labelSmall,
+                    .border(1.dp, A2MColors.Accent.copy(alpha = 0.4f), RoundedCornerShape(24.dp)),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                A2M_NAV_ITEMS.forEach { item ->
+                    val selected = selectedRoute == item.route
+                    val tint by animateColorAsState(
+                        targetValue = if (selected) A2MColors.Accent else A2MColors.Faint,
+                        animationSpec = tween(220),
+                        label = "navigationTint",
                     )
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp)
+                            .clip(A2M_NAV_PILL_SHAPE)
+                            .selectable(selected = selected, role = Role.Tab) { onNavigate(item.route) },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(
+                            imageVector = item.icon,
+                            contentDescription = item.label,
+                            tint = tint,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Text(
+                            text = item.label,
+                            fontSize = 11.sp,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = tint,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
                 }
             }
         }

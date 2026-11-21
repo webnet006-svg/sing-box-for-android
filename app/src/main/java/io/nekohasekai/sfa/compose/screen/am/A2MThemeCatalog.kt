@@ -50,13 +50,13 @@ enum class A2MThemeMode(val key: String, val label: String) {
     ;
 
     companion object {
-        fun fromKey(key: String): A2MThemeMode = entries.firstOrNull { it.key == key } ?: LIGHT
+        fun fromKey(key: String): A2MThemeMode = entries.firstOrNull { it.key == key } ?: DARK
     }
 }
 
 data class A2MThemeSettings(
     val paletteId: String = "a2m",
-    val mode: A2MThemeMode = A2MThemeMode.LIGHT,
+    val mode: A2MThemeMode = A2MThemeMode.DARK,
 )
 
 object A2MThemeCatalog {
@@ -98,17 +98,17 @@ object A2MThemeCatalog {
         // ── a2m (signature) ─────────────────────────────────────────────
         add(
             A2MPalette(
-                "a2m", "A2M", "Le style signature : menthe et teal profond",
+                "a2m", "A2M", "Cyber sécurité, bleu nuit et cyan",
                 false,
-                t("0xFFDDF3EE", "0xFFF7FBFA", "0xFF0FA98F", "0xFF7C5CFF", "0xFF0D2B33", "0xFF54787F", "0xFF93B3B8", "0xFFD8E8E5", "0xFFFFFFFF", "0xFFF4FAF8", "0xFFE3F2EE", "0xFFE5484D", "0xFFD97706"),
+                t("0xFF14418A", "0xFF06152E", "0xFF20DFFF", "0xFF9A8CFF", "0xFFE8F2FF", "0xFF8CA6C8", "0xFF4A6A99", "0x3850A0FF", "0x7314325F", "0xB30A1E46", "0xFF102A50", "0xFFFF5C6C", "0xFFFFC93C"),
                 emptyList(),
             ),
         )
         add(
             A2MPalette(
-                "a2m", "A2M", "Le style signature, en sombre",
+                "a2m", "A2M", "Cyber sécurité, bleu nuit et cyan",
                 true,
-                t("0xFF0D1418", "0xFF080E12", "0xFF16E0C4", "0xFF7C5CFF", "0xFFEAF6F3", "0xFF7FA6A0", "0xFF4A6B66", "0xFF1D2E33", "0xFF122024", "0xFF0C171A", "0xFF14262B", "0xFFFF5C6C", "0xFFFFB020"),
+                t("0xFF14418A", "0xFF06152E", "0xFF20DFFF", "0xFF9A8CFF", "0xFFE8F2FF", "0xFF8CA6C8", "0xFF4A6A99", "0x3850A0FF", "0x7314325F", "0xB30A1E46", "0xFF102A50", "0xFFFF5C6C", "0xFFFFC93C"),
                 emptyList(),
             ),
         )

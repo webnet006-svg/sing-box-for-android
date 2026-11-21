@@ -2,6 +2,8 @@ package io.nekohasekai.sfa.compose.navigation
 
 import android.net.Uri
 import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -153,7 +155,13 @@ fun NavHost(
             }
         }
 
-        composable(A2MRoutes.HOME) {
+        composable(
+            route = A2MRoutes.HOME,
+            enterTransition = { fadeIn(animationSpec = tween(220)) },
+            exitTransition = { fadeOut(animationSpec = tween(180)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+            popExitTransition = { fadeOut(animationSpec = tween(180)) },
+        ) {
             A2MTUNHomeScreen(
                 serviceStatus = serviceStatus,
                 dashboardViewModel = dashboardViewModel ?: viewModel(),
@@ -166,7 +174,13 @@ fun NavHost(
             )
         }
 
-        composable(A2MRoutes.SERVERS) {
+        composable(
+            route = A2MRoutes.SERVERS,
+            enterTransition = { fadeIn(animationSpec = tween(220)) },
+            exitTransition = { fadeOut(animationSpec = tween(180)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+            popExitTransition = { fadeOut(animationSpec = tween(180)) },
+        ) {
             A2MServersScreen(
                 dashboardViewModel = dashboardViewModel ?: viewModel(),
                 onEditProfile = { profileId ->
@@ -209,7 +223,13 @@ fun NavHost(
             )
         }
 
-        composable(A2MRoutes.SETTINGS) {
+        composable(
+            route = A2MRoutes.SETTINGS,
+            enterTransition = { fadeIn(animationSpec = tween(220)) },
+            exitTransition = { fadeOut(animationSpec = tween(180)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+            popExitTransition = { fadeOut(animationSpec = tween(180)) },
+        ) {
             A2MSettingsScreen(
                 serviceStatus = serviceStatus,
                 onNavigate = { route ->
