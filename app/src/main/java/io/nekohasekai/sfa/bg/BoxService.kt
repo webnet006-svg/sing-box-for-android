@@ -52,6 +52,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 
 class BoxService(private val service: Service, private val platformInterface: PlatformInterface) : CommandServerHandler {
@@ -89,6 +91,8 @@ class BoxService(private val service: Service, private val platformInterface: Pl
     private var lifecycleJob: Job? = null
     private var backgroundStopJob: Job? = null
     private var reconnectJob: Job? = null
+    /** Serialise settings/network reloads; libbox does not support concurrent reload RPCs. */
+    private val reloadMutex = Mutex()
 
     init {
         idleModeScope.launch {
@@ -248,7 +252,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             }
 
             // Décoration A2M (bloqueur de pubs) appliquée à la config réelle.
-            val effectiveContent = effectiveContent(content)
+            var effectiveContent = effectiveContent(content)
 
             lastProfileName = profile.name
             withContext(Dispatchers.Main) {
@@ -262,8 +266,15 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             try {
                 Libbox.checkConfig(effectiveContent)
             } catch (e: Exception) {
-                stopAndAlert(Alert.CreateService, e.message)
-                return
+                // A remote ad rule-set must never make the VPN unusable.
+                // Retry validation without the optional decoration and keep
+                // the service available; the UI can report the degraded mode.
+                if (!Settings.adBlockEnabled) {
+                    stopAndAlert(Alert.CreateService, e.message)
+                    return
+                }
+                effectiveContent = effectiveContent(content, adBlock = false)
+                Log.w(TAG, "Adblock configuration rejected, starting without adblock", e)
             }
 
             val serviceOverride =
@@ -288,20 +299,36 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                 // => réécriture de la pile TUN en "system" et nouvelle tentative unique.
                 val fallbackContent = buildStackFallbackContent(effectiveContent, e.message)
                 if (fallbackContent == null) {
-                    stopAndAlert(Alert.CreateService, e.message)
-                    return
-                }
-                Log.w(TAG, "gVisor stack unavailable, retrying with system stack")
-                try {
-                    commandServer.startOrReloadService(fallbackContent, serviceOverride)
-                    // The fallback is expected on Android builds without the
-                    // optional gVisor implementation. Keep it out of the error
-                    // channel: the tunnel is healthy and a modal dialog here
-                    // incorrectly suggests that connection failed.
-                    Log.i(TAG, "Tunnel started with system stack after gVisor fallback")
-                } catch (retryError: Exception) {
-                    stopAndAlert(Alert.CreateService, retryError.message)
-                    return
+                    if (Settings.adBlockEnabled) {
+                        val withoutAdBlock = effectiveContent(content, adBlock = false)
+                        try {
+                            commandServer.startOrReloadService(withoutAdBlock, serviceOverride)
+                            Log.w(TAG, "Tunnel started without adblock after rule-set failure")
+                        } catch (retryError: Exception) {
+                            stopAndAlert(Alert.CreateService, retryError.message)
+                            return
+                        }
+                    } else {
+                        stopAndAlert(Alert.CreateService, e.message)
+                        return
+                    }
+                    // The optional feature was rejected; continue with the VPN.
+                    if (Settings.adBlockEnabled) {
+                        Log.w(TAG, "Adblock disabled for this session after startup failure")
+                    }
+                } else {
+                    Log.w(TAG, "gVisor stack unavailable, retrying with system stack")
+                    try {
+                        commandServer.startOrReloadService(fallbackContent, serviceOverride)
+                        // The fallback is expected on Android builds without the
+                        // optional gVisor implementation. Keep it out of the error
+                        // channel: the tunnel is healthy and a modal dialog here
+                        // incorrectly suggests that connection failed.
+                        Log.i(TAG, "Tunnel started with system stack after gVisor fallback")
+                    } catch (retryError: Exception) {
+                        stopAndAlert(Alert.CreateService, retryError.message)
+                        return
+                    }
                 }
             }
 
@@ -337,7 +364,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
      * configuration avec `"stack": "system"`, sinon null.
      */
     /** Contenu effectivement chargé : config du profil + décorations A2M (LAN, DNS, moteur, pub). */
-    private fun effectiveContent(raw: String): String {
+    private fun effectiveContent(raw: String, adBlock: Boolean = Settings.adBlockEnabled): String {
         val dnsOverride =
             if (Settings.dnsOverrideEnabled) {
                 A2MConfigDecorations.DnsOverride(
@@ -379,7 +406,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             bypassPrivate = Settings.bypassPrivateNetworks,
             dns = dnsOverride,
             engine = engine,
-            adBlock = Settings.adBlockEnabled,
+            adBlock = adBlock,
             hotspotPort = if (Settings.hotspotProxyEnabled) Settings.hotspotProxyPort else null,
             tls = tls,
             gaming = Settings.gamingMode,
@@ -426,6 +453,10 @@ class BoxService(private val service: Service, private val platformInterface: Pl
     }
 
     suspend fun serviceReload0() {
+        reloadMutex.withLock { serviceReloadLocked() }
+    }
+
+    private suspend fun serviceReloadLocked() {
         val selectedProfileId = Settings.selectedProfile
         if (selectedProfileId == -1L) {
             stopAndAlert(Alert.EmptyConfiguration)
@@ -466,7 +497,18 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             // the UI reports a misleading RPC EOF while the tunnel is stopped.
             val fallbackContent = buildStackFallbackContent(effectiveContent, e.message)
             if (fallbackContent == null) {
-                stopAndAlert(Alert.CreateService, e.message)
+                if (Settings.adBlockEnabled) {
+                    try {
+                        commandServer.startOrReloadService(effectiveContent(content, adBlock = false), serviceOverride)
+                        Log.w(TAG, "Tunnel reloaded without adblock after rule-set failure")
+                    } catch (retryError: Exception) {
+                        // Keep the current service alive when possible. A failed
+                        // optional reload must not turn a connected VPN off.
+                        Log.e(TAG, "Optional adblock reload failed", retryError)
+                    }
+                } else {
+                    Log.e(TAG, "Service reload failed; keeping current tunnel", e)
+                }
                 return
             }
             Log.w(TAG, "gVisor stack unavailable during reload, retrying with system stack")
