@@ -148,9 +148,10 @@ fun A2MTUNHomeScreen(
             }
         }
     }
+    val serviceStartTime = uiState.serviceStartTime
     val sessionSeconds =
-        if (serviceStatus == Status.Started && uiState.serviceStartTime != null) {
-            ((wallClock - uiState.serviceStartTime) / 1000L).coerceAtLeast(0L)
+        if (serviceStatus == Status.Started && serviceStartTime != null) {
+            ((wallClock - serviceStartTime) / 1000L).coerceAtLeast(0L)
         } else {
             0L
         }
