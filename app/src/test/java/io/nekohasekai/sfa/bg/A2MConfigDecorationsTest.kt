@@ -104,6 +104,8 @@ class A2MConfigDecorationsTest {
         assertEquals("cloudflare-dns.com", remote["server"]!!.jsonPrimitive.content)
         assertEquals("/dns-query", remote["path"]!!.jsonPrimitive.content)
         assertEquals("proxy", remote["detour"]!!.jsonPrimitive.content)
+        assertEquals("bootstrap", root["outbounds"]!!.jsonArray[0].jsonObject["domain_resolver"]!!.jsonPrimitive.content)
+        assertEquals("ipv4_only", root["outbounds"]!!.jsonArray[0].jsonObject["domain_strategy"]!!.jsonPrimitive.content)
         val bootstrap = servers[1].jsonObject
         assertEquals("udp", bootstrap["type"]!!.jsonPrimitive.content)
         assertEquals("9.9.9.9", bootstrap["server"]!!.jsonPrimitive.content)

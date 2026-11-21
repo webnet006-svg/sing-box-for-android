@@ -446,24 +446,37 @@ class BoxService(private val service: Service, private val platformInterface: Pl
         // Décoration A2M (bloqueur de pubs) appliquée aussi au rechargement.
         val effectiveContent = effectiveContent(content)
         lastProfileName = profile.name
-        try {
-            commandServer.startOrReloadService(
-                effectiveContent,
-                OverrideOptions().apply {
-                    autoRedirect = Settings.autoRedirect
-                    if (Vendor.isPerAppProxyAvailable() && Settings.perAppProxyEnabled) {
-                        val appList = Settings.getEffectivePerAppProxyList()
-                        if (Settings.getEffectivePerAppProxyMode() == Settings.PER_APP_PROXY_INCLUDE) {
-                            includePackage = PlatformInterfaceWrapper.StringArray((appList + Application.application.packageName).iterator())
-                        } else {
-                            excludePackage = PlatformInterfaceWrapper.StringArray((appList - Application.application.packageName).iterator())
-                        }
+        val serviceOverride =
+            OverrideOptions().apply {
+                autoRedirect = Settings.autoRedirect
+                if (Vendor.isPerAppProxyAvailable() && Settings.perAppProxyEnabled) {
+                    val appList = Settings.getEffectivePerAppProxyList()
+                    if (Settings.getEffectivePerAppProxyMode() == Settings.PER_APP_PROXY_INCLUDE) {
+                        includePackage = PlatformInterfaceWrapper.StringArray((appList + Application.application.packageName).iterator())
+                    } else {
+                        excludePackage = PlatformInterfaceWrapper.StringArray((appList - Application.application.packageName).iterator())
                     }
-                },
-            )
+                }
+            }
+        try {
+            commandServer.startOrReloadService(effectiveContent, serviceOverride)
         } catch (e: Exception) {
-            stopAndAlert(Alert.CreateService, e.message)
-            return
+            // Reloads (DNS/ad-block toggles) must use the same gVisor fallback
+            // as the initial start. Otherwise the old service is torn down and
+            // the UI reports a misleading RPC EOF while the tunnel is stopped.
+            val fallbackContent = buildStackFallbackContent(effectiveContent, e.message)
+            if (fallbackContent == null) {
+                stopAndAlert(Alert.CreateService, e.message)
+                return
+            }
+            Log.w(TAG, "gVisor stack unavailable during reload, retrying with system stack")
+            try {
+                commandServer.startOrReloadService(fallbackContent, serviceOverride)
+                Log.i(TAG, "Tunnel reloaded with system stack after gVisor fallback")
+            } catch (retryError: Exception) {
+                stopAndAlert(Alert.CreateService, retryError.message)
+                return
+            }
         }
 
         if (commandServer.needWIFIState()) {

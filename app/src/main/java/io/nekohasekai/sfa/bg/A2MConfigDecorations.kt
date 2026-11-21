@@ -515,6 +515,24 @@ object A2MConfigDecorations {
                 // Tunnel IPv4 : privilégier les réponses A pour éviter les lenteurs AAAA.
                 put("strategy", "prefer_ipv4")
             }
+            // The proxy endpoint itself must be resolvable before the tunnel
+            // exists. Without an explicit resolver, sing-box sends this lookup
+            // through the newly selected remote DNS/proxy and gets a timeout
+            // (the characteristic `lookup ... exchange deadline exceeded`).
+            val resolvedOutbounds = outbounds.map { element ->
+                val outbound = element as? JsonObject ?: return@map element
+                val type = outboundType(outbound)
+                val server = (outbound["server"] as? JsonPrimitive)?.content
+                if (type == null || server.isNullOrBlank() || isIpLiteral(server)) {
+                    element
+                } else {
+                    val updated = outbound.toMutableMap()
+                    updated["domain_resolver"] = JsonPrimitive("bootstrap")
+                    updated["domain_strategy"] = JsonPrimitive("ipv4_only")
+                    JsonObject(updated)
+                }
+            }
+            root["outbounds"] = JsonArray(resolvedOutbounds)
             route["default_domain_resolver"] = buildJsonObject {
                 put("server", "bootstrap")
             }
