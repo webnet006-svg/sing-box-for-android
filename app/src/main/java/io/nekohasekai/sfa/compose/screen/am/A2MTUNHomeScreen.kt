@@ -80,6 +80,7 @@ import io.nekohasekai.sfa.constant.Status
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.DisposableEffect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -107,6 +108,7 @@ fun A2MTUNHomeScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by dashboardViewModel.uiState.collectAsState()
+    val context = LocalContext.current
     val scaffoldPadding = LocalScaffoldPadding.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var screenVisible by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
@@ -125,11 +127,6 @@ fun A2MTUNHomeScreen(
     // IP réelle du réseau mobile : relue depuis le système toutes les 3 s tant que
     // l'écran est visible (fonctionne même sans data active).
     var cellularIp by remember { mutableStateOf<String?>(null) }
-    var protocolLabel by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(uiState.selectedProfileId, uiState.profiles) {
-        val profile = uiState.profiles.firstOrNull { it.id == uiState.selectedProfileId }
-        protocolLabel = withContext(Dispatchers.IO) { profile?.let { A2MProfileInfo.summary(it).protocol } }
-    }
     LaunchedEffect(screenVisible) {
         while (screenVisible) {
             cellularIp = withContext(Dispatchers.IO) { A2MNetworkInfo.readCellularIp() }
@@ -249,6 +246,7 @@ fun A2MTUNHomeScreen(
                 enabled = uiState.selectedProfileId != -1L,
                 animationsEnabled = screenVisible,
                 onClick = {
+                    A2MClickFeedback.applyConfigured(context)
                     connectionError = false
                     when (serviceStatus) {
                         Status.Stopped -> {
@@ -268,33 +266,30 @@ fun A2MTUNHomeScreen(
                 isBusy = isBusy,
                 hasServer = uiState.selectedProfileId != -1L,
                 serverName = uiState.selectedProfileName,
-                sessionSeconds = sessionSeconds,
             )
 
             Spacer(modifier = Modifier.height(14.dp))
 
             // ── Trafic réseau : vitesses, graphique et compteurs (données réelles du moteur) ──
             A2MTrafficCard(
-                downlink = uiState.downlink,
-                uplink = uiState.uplink,
-                downTotal = uiState.downlinkTotal,
-                upTotal = uiState.uplinkTotal,
+                downlink = uiState.downlink.takeIf { uiState.trafficVisible } ?: "—",
+                uplink = uiState.uplink.takeIf { uiState.trafficVisible } ?: "—",
+                downTotal = uiState.downlinkTotal.takeIf { uiState.trafficVisible } ?: "—",
+                upTotal = uiState.uplinkTotal.takeIf { uiState.trafficVisible } ?: "—",
                 downHistory = uiState.downlinkHistory,
                 upHistory = uiState.uplinkHistory,
-                connections = uiState.connectionsCount,
+                connections = if (uiState.trafficVisible) uiState.connectionsCount.toString() else "—",
+                statisticsAvailable = uiState.trafficVisible,
+                isConnected = isConnected,
+                isConnecting = isBusy,
+                hasTraffic = isConnected && uiState.trafficActive,
                 onClick = { onNavigate(A2MRoutes.CONSUMPTION) },
             )
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // ── Configuration actuelle : nom du serveur + IP du réseau mobile ──
-            A2MConfigNameCard(
-                hasServer = uiState.selectedProfileId != -1L,
-                name = uiState.selectedProfileName,
-                protocol = protocolLabel,
-                cellularIp = cellularIp,
-                onClick = { onNavigate(A2MRoutes.SERVERS) },
-            )
+            // L'accueil ne révèle que l'IP cellulaire ; les profils restent dans Serveurs.
+            A2MCellularIpCard(cellularIp)
 
             Spacer(modifier = Modifier.height(14.dp))
         }
@@ -336,17 +331,39 @@ private fun A2MConnectionOrb(
     animationsEnabled: Boolean,
     onClick: () -> Unit,
 ) {
-    val pulse = if (animationsEnabled) {
+    val animationStyle = A2MThemeState.orbAnimationId
+    var animationPhase = 0.72f
+    var ringRotation = 0f
+    if (animationsEnabled && isConnected && animationStyle != "steady") {
         val infiniteTransition = rememberInfiniteTransition(label = "orb")
-        val animatedPulse by infiniteTransition.animateFloat(
-            initialValue = 0.55f,
+        val cycleMillis = when (animationStyle) {
+            "spark" -> 680
+            "breathe" -> 2600
+            "wave" -> 1900
+            else -> 1400
+        }
+        val animatedPhase by infiniteTransition.animateFloat(
+            initialValue = if (animationStyle == "spark") 0.22f else 0.48f,
             targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(1400), RepeatMode.Reverse),
-            label = "pulse",
+            animationSpec = infiniteRepeatable(tween(cycleMillis), RepeatMode.Reverse),
+            label = "orb-phase",
         )
-        animatedPulse
-    } else 0.72f
-    val glowAlpha = if (!animationsEnabled) 0.55f else if (isConnected) pulse else if (isBusy) 0.25f else 0.35f
+        animationPhase = animatedPhase
+        if (animationStyle == "orbit" || animationStyle == "scan") {
+            val animatedRotation by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(tween(if (animationStyle == "scan") 2600 else 7000), RepeatMode.Restart),
+                label = "orb-ring-rotation",
+            )
+            ringRotation = animatedRotation
+        }
+    }
+    val glowAlpha = when {
+        isConnected && animationStyle != "steady" -> animationPhase
+        isBusy -> 0.32f
+        else -> 0.48f
+    }
     val stateColor by animateColorAsState(
         targetValue =
         when {
@@ -372,7 +389,7 @@ private fun A2MConnectionOrb(
                 .background(A2M_ORB_GLOW),
         )
         // Graduations radiales (cadran)
-        Canvas(modifier = Modifier.size(dialSize * 0.93f)) {
+        Canvas(modifier = Modifier.size(dialSize * 0.93f).graphicsLayer { rotationZ = ringRotation }) {
             val strokeWidth = 2.dp.toPx()
             val radius = size.minDimension / 2f
             val inner = radius - 12.dp.toPx()
@@ -454,7 +471,6 @@ private fun A2MStatusCard(
     isBusy: Boolean,
     hasServer: Boolean,
     serverName: String?,
-    sessionSeconds: Long,
 ) {
     Column(
         modifier =
@@ -510,9 +526,6 @@ private fun A2MStatusCard(
             Text(serverName, style = A2MType.secondary, color = A2MColors.Muted, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
         }
-        if (isConnected) {
-            Text("Durée · ${formatSession(sessionSeconds)}", style = A2MType.secondary, color = A2MColors.Muted, modifier = Modifier.padding(top = 4.dp))
-        }
     }
 }
 
@@ -526,7 +539,11 @@ private fun A2MTrafficCard(
     upTotal: String,
     downHistory: List<Float>,
     upHistory: List<Float>,
-    connections: Int,
+    connections: String,
+    statisticsAvailable: Boolean,
+    isConnected: Boolean,
+    isConnecting: Boolean,
+    hasTraffic: Boolean,
     onClick: () -> Unit,
 ) {
     Column(
@@ -558,18 +575,25 @@ private fun A2MTrafficCard(
                 color = A2MColors.Text,
             )
             Spacer(modifier = Modifier.weight(1f))
+            val liveLabel = when {
+                hasTraffic -> "LIVE"
+                isConnecting -> "CONNEXION"
+                isConnected -> "EN ATTENTE"
+                else -> "INACTIF"
+            }
+            val liveColor = if (hasTraffic) A2MColors.Accent else A2MColors.Faint
             Box(
                 modifier =
                 Modifier
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(A2MColors.Accent),
+                    .background(liveColor),
             )
             Text(
-                text = "LIVE",
+                text = liveLabel,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                color = A2MColors.Accent,
+                color = liveColor,
             )
         }
 
@@ -638,6 +662,7 @@ private fun A2MTrafficCard(
                 .height(104.dp)
                 .padding(top = 10.dp),
         ) {
+            if (!statisticsAvailable) return@Canvas
             val maxValue = (downHistory.maxOrNull() ?: 0f).coerceAtLeast((upHistory.maxOrNull() ?: 0f)).coerceAtLeast(1f)
             val stepX = if (downHistory.size > 1) size.width / (downHistory.size - 1) else size.width
             val usableHeight = size.height * 0.92f
@@ -695,7 +720,7 @@ private fun A2MTrafficCard(
             VerticalRule()
             TrafficCounter("Uploadé", upTotal)
             VerticalRule()
-            TrafficCounter("Connexions", connections.toString())
+            TrafficCounter("Connexions", connections)
         }
     }
 }
@@ -736,16 +761,10 @@ private fun RowScope.VerticalRule() {
     )
 }
 
-// ── Carte configuration actuelle : nom du serveur sélectionné seulement ────
+// ── Carte IP du réseau mobile : seule donnée réseau affichée sur l'accueil ──
 
 @Composable
-private fun A2MConfigNameCard(
-    hasServer: Boolean,
-    name: String?,
-    protocol: String?,
-    cellularIp: String?,
-    onClick: () -> Unit,
-) {
+private fun A2MCellularIpCard(cellularIp: String?) {
     Column(
         modifier =
         Modifier
@@ -753,34 +772,8 @@ private fun A2MConfigNameCard(
             .clip(A2MShapes.card)
             .background(A2MColors.CardBrush)
             .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
-            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(
-                text = "Configuration actuelle",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = A2MColors.Text,
-                modifier = Modifier.weight(1f),
-            )
-            if (!protocol.isNullOrBlank()) A2MStatusBadge(protocol, A2MBadgeTone.ACCENT)
-        }
-
-        Text(
-            text = if (hasServer) (name?.takeIf { it.isNotBlank() } ?: "Sans nom") else "Choisir un serveur",
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = if (hasServer) A2MColors.Text else A2MColors.Muted,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 10.dp),
-        )
-
         // IP réelle du réseau mobile : lue sur l'interface cellulaire de l'appareil
         // (rmnet/ccmni/wwan…), présente dès l'enregistrement au réseau, même sans data.
         Text(

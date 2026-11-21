@@ -370,6 +370,11 @@ object A2MThemeState {
     /** Config système claire/sombre, mise à jour depuis l'interface (mode SYSTEM). */
     private var systemDark by mutableStateOf(false)
 
+    var fontId by mutableStateOf("system")
+        private set
+    var orbAnimationId by mutableStateOf("pulse")
+        private set
+
     /** Résout palette×mode selon le réglage (SYSTEM suit la configuration Android). */
     fun currentPalette(): A2MPalette = A2MThemeCatalog.forId(settings.paletteId, true)
 
@@ -382,6 +387,8 @@ object A2MThemeState {
 
     /** Charge les préférences persistées au démarrage de l'application. */
     fun load() {
+        fontId = A2MFontCatalog.normalizedId(Settings.a2mFontId)
+        orbAnimationId = A2MOrbAnimations.normalizedId(Settings.a2mOrbAnimationId)
         val savedKey = Settings.themeKey
         // Migration douce de l'ancien identifiant de palette « onfaa ».
         val key =
@@ -394,6 +401,16 @@ object A2MThemeState {
         settings = A2MThemeSettings(paletteId = key, mode = A2MThemeMode.DARK)
         Settings.themeMode = A2MThemeMode.DARK.key
         applySettings()
+    }
+
+    fun setFont(id: String) {
+        fontId = A2MFontCatalog.normalizedId(id)
+        Settings.a2mFontId = fontId
+    }
+
+    fun setOrbAnimation(id: String) {
+        orbAnimationId = A2MOrbAnimations.normalizedId(id)
+        Settings.a2mOrbAnimationId = orbAnimationId
     }
 
     fun setPalette(id: String) {
@@ -441,4 +458,51 @@ object A2MThemeState {
     private fun applySettings() {
         A2MColors.applyPalette(A2MThemeCatalog.forId(settings.paletteId, true).tokens)
     }
+}
+
+/** Built-in Android typefaces only: no runtime downloads or added font binaries. */
+data class A2MFontChoice(val id: String, val label: String, val familyName: String)
+
+object A2MFontCatalog {
+    val choices = listOf(
+        A2MFontChoice("system", "Système", "sans-serif"),
+        A2MFontChoice("condensed", "Condensée", "sans-serif-condensed"),
+        A2MFontChoice("light", "Fine", "sans-serif-light"),
+        A2MFontChoice("medium", "Moyenne", "sans-serif-medium"),
+        A2MFontChoice("black", "Noire", "sans-serif-black"),
+        A2MFontChoice("thin", "Légère", "sans-serif-thin"),
+        A2MFontChoice("condensed-light", "Condensée fine", "sans-serif-condensed-light"),
+        A2MFontChoice("condensed-medium", "Condensée moyenne", "sans-serif-condensed-medium"),
+        A2MFontChoice("condensed-black", "Condensée noire", "sans-serif-condensed-black"),
+        A2MFontChoice("rounded", "Arrondie", "sans-serif-rounded"),
+        A2MFontChoice("serif", "Sérif", "serif"),
+        A2MFontChoice("monospace", "Monospace", "monospace"),
+        A2MFontChoice("casual", "Décontractée", "casual"),
+        A2MFontChoice("cursive", "Manuscrite", "cursive"),
+        A2MFontChoice("small-caps", "Petites capitales", "sans-serif-smallcaps"),
+    )
+
+    fun normalizedId(id: String): String = choices.firstOrNull { it.id == id }?.id ?: "system"
+
+    fun family(id: String): androidx.compose.ui.text.font.FontFamily {
+        val choice = choices.firstOrNull { it.id == normalizedId(id) } ?: choices.first()
+        val typeface = android.graphics.Typeface.create(choice.familyName, android.graphics.Typeface.NORMAL)
+        return androidx.compose.ui.text.font.FontFamily(typeface)
+    }
+}
+
+data class A2MOrbAnimation(val id: String, val label: String, val description: String)
+
+object A2MOrbAnimations {
+    val choices = listOf(
+        A2MOrbAnimation("pulse", "Pulsation", "Halo qui respire"),
+        A2MOrbAnimation("orbit", "Orbite", "Graduations en rotation lente"),
+        A2MOrbAnimation("wave", "Onde", "Lueur qui varie doucement"),
+        A2MOrbAnimation("spark", "Impulsion", "Accent lumineux rythmé"),
+        A2MOrbAnimation("breathe", "Respiration", "Halo doux et lent"),
+        A2MOrbAnimation("scan", "Balayage", "Anneau animé"),
+        A2MOrbAnimation("steady", "Stable", "Aucune animation continue"),
+    )
+
+    fun normalizedId(id: String): String = choices.firstOrNull { it.id == id }?.id ?: "pulse"
 }

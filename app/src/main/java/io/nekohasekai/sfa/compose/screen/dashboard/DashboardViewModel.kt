@@ -24,8 +24,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONException
 import java.io.File
@@ -69,6 +71,8 @@ data class DashboardUiState(
     val isStatusVisible: Boolean = false,
     // Traffic
     val trafficVisible: Boolean = false,
+    /** True only when the latest engine statistics sample reports real bytes. */
+    val trafficActive: Boolean = false,
     val connectionsIn: String = "0",
     val connectionsOut: String = "0",
     val uplink: String = "0 B/s",
@@ -290,6 +294,37 @@ class DashboardViewModel :
         }
     }
 
+    /** Selects a tested server and, when the tunnel is active, waits for a full
+     * stop/start cycle so the replacement profile is the one actually serving traffic. */
+    suspend fun selectProfileAndReconnect(profileId: Long): Boolean {
+        check(!currentState.isLoading) { "Une autre opération sur les serveurs est en cours." }
+        val wasConnected = _serviceStatus.value == Status.Started
+        updateState { copy(isLoading = true) }
+        try {
+            val profile = withContext(Dispatchers.IO) {
+                ProfileManager.get(profileId) ?: error("Le serveur sélectionné n'existe plus.")
+            }
+            withContext(Dispatchers.IO) { Settings.selectedProfile = profileId }
+            withContext(Dispatchers.Main) {
+                updateState {
+                    copy(
+                        selectedProfileId = profile.id,
+                        selectedProfileName = profile.name,
+                    )
+                }
+            }
+            if (!wasConnected) return false
+
+            withContext(Dispatchers.IO) { BoxService.stop() }
+            withTimeout(15_000L) { _serviceStatus.first { it == Status.Stopped } }
+            sendGlobalEvent(UiEvent.RequestStartService)
+            withTimeout(45_000L) { _serviceStatus.first { it == Status.Started } }
+            return true
+        } finally {
+            updateState { copy(isLoading = false) }
+        }
+    }
+
     private suspend fun applySelectedProfile() {
         if (_serviceStatus.value != Status.Started) return
         if (Settings.detectServiceMode() == Settings.serviceMode) {
@@ -450,6 +485,8 @@ class DashboardViewModel :
                     } else {
                         status == Status.Starting || status == Status.Started
                     },
+                    trafficVisible = if (status == Status.Starting || status == Status.Stopped) false else trafficVisible,
+                    trafficActive = if (status == Status.Starting || status == Status.Stopped) false else trafficActive,
                 )
             }
             handleServiceStatusChange(status)
@@ -481,6 +518,7 @@ class DashboardViewModel :
                         clashModeVisible = false,
                         systemProxyVisible = false,
                         trafficVisible = false,
+                        trafficActive = false,
                         memory = "",
                         goroutines = "",
                         connectionsIn = "0",
@@ -610,8 +648,8 @@ class DashboardViewModel :
                 copy(
                     memory = Libbox.formatBytes(status.memory),
                     goroutines = status.goroutines.toString(),
-                    // Only set trafficVisible to true, never back to false from status updates
-                    trafficVisible = if (status.trafficAvailable) true else trafficVisible,
+                    trafficVisible = status.trafficAvailable,
+                    trafficActive = status.trafficAvailable && (status.downlink > 0L || status.uplink > 0L),
                     connectionsCount = status.connectionsIn,
                     connectionsIn = status.connectionsIn.toString(),
                     connectionsOut = status.connectionsOut.toString(),

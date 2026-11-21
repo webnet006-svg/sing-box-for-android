@@ -101,6 +101,12 @@ object Settings {
 
     // ── Retour tactile dans les réglages : sound / vibrate / silent ──
     var clickFeedback by dataStore.string(SettingsKey.CLICK_FEEDBACK) { "silent" }
+    var a2mFontId by dataStore.string(SettingsKey.A2M_FONT_ID) { "system" }
+    var a2mOrbAnimationId by dataStore.string(SettingsKey.A2M_ORB_ANIMATION_ID) { "pulse" }
+    var a2mSoundsEnabled by dataStore.boolean(SettingsKey.A2M_SOUNDS_ENABLED) { false }
+    var a2mSilenceMode by dataStore.boolean(SettingsKey.A2M_SILENCE_MODE) { false }
+    var a2mVibrationsEnabled by dataStore.boolean(SettingsKey.A2M_VIBRATIONS_ENABLED) { false }
+    var a2mClickSoundId by dataStore.string(SettingsKey.A2M_CLICK_SOUND_ID) { "1" }
 
     const val PER_APP_PROXY_DISABLED = 0
     const val PER_APP_PROXY_EXCLUDE = 1

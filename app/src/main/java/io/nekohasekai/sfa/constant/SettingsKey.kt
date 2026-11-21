@@ -56,6 +56,12 @@ object SettingsKey {
 
     // Retour tactile (clics dans les réglages) : sound / vibrate / silent.
     const val CLICK_FEEDBACK = "click_feedback"
+    const val A2M_FONT_ID = "a2m_font_id"
+    const val A2M_ORB_ANIMATION_ID = "a2m_orb_animation_id"
+    const val A2M_SOUNDS_ENABLED = "a2m_sounds_enabled"
+    const val A2M_SILENCE_MODE = "a2m_silence_mode"
+    const val A2M_VIBRATIONS_ENABLED = "a2m_vibrations_enabled"
+    const val A2M_CLICK_SOUND_ID = "a2m_click_sound_id"
 
     const val PRIVILEGE_SETTINGS_ENABLED = "hide_settings_enabled"
     const val PRIVILEGE_SETTINGS_LIST = "hide_settings_list"

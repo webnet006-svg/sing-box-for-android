@@ -34,10 +34,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.nekohasekai.sfa.compose.navigation.A2MRoutes
+import io.nekohasekai.sfa.compose.screen.am.A2MClickFeedback
 import io.nekohasekai.sfa.compose.screen.am.A2MColors
 
 private data class A2MNavItem(
@@ -66,6 +68,7 @@ fun A2MNavigationBar(
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     Box(
         modifier =
         modifier
@@ -119,7 +122,10 @@ fun A2MNavigationBar(
                             .weight(1f)
                             .height(50.dp)
                             .clip(A2M_NAV_PILL_SHAPE)
-                            .selectable(selected = selected, role = Role.Tab) { onNavigate(item.route) },
+                            .selectable(selected = selected, role = Role.Tab) {
+                                A2MClickFeedback.applyConfigured(context)
+                                onNavigate(item.route)
+                            },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {

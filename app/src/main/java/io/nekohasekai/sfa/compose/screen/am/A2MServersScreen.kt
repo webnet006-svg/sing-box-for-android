@@ -150,6 +150,7 @@ fun A2MServersScreen(
     var testAllRunning by remember { mutableStateOf(false) }
     var testAllDone by remember { mutableStateOf(0) }
     var testAllTotal by remember { mutableStateOf(0) }
+    var selectingFastest by remember { mutableStateOf(false) }
     val favoritesPreferences = remember { context.getSharedPreferences("a2m_server_ui", android.content.Context.MODE_PRIVATE) }
     var favoriteIds by remember { mutableStateOf(favoritesPreferences.getStringSet("favorites", emptySet()).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()) }
     var favoritesOnly by remember { mutableStateOf(false) }
@@ -480,34 +481,51 @@ fun A2MServersScreen(
         }
     }
 
-    /**
-     * Sélectionne le meilleur résultat TCP déjà conservé. Ne lance jamais la
-     * connexion VPN : [DashboardViewModel.selectProfile] ne fait que choisir
-     * le profil (et recharge le service s'il tourne déjà).
-     */
+    /** Choisit le serveur testé le plus rapide et attend la reprise du tunnel actif. */
     fun selectFastest() {
-        val fastest = fastestProfileId(testLatencies)
-        if (fastest == null) {
-            Toast.makeText(
-                context,
-                "Testez d'abord les serveurs avec « Tester tout ».",
-                Toast.LENGTH_LONG,
-            ).show()
+        if (selectingFastest) return
+        if (testAllRunning) {
+            Toast.makeText(context, "Attendez la fin du test en cours.", Toast.LENGTH_SHORT).show()
             return
         }
-        val profile = uiState.profiles.firstOrNull { it.id == fastest }
-        if (profile == null) {
-            Toast.makeText(context, "Le serveur le plus rapide n'existe plus.", Toast.LENGTH_LONG).show()
+        val targets = uiState.profiles
+        if (targets.isEmpty()) {
+            Toast.makeText(context, "Aucun serveur à tester.", Toast.LENGTH_LONG).show()
             return
         }
-        if (profile.id != uiState.selectedProfileId) {
-            dashboardViewModel.selectProfile(profile.id)
+        selectingFastest = true
+        coroutineScope.launch {
+            try {
+                // Mesure fraîche pour cette sélection : une ancienne latence ne
+                // doit pas envoyer le tunnel vers un serveur devenu indisponible.
+                testResults = emptyMap()
+                testLatencies = emptyMap()
+                testProfiles(targets)
+                val testJob = testAllJob
+                testJob?.join()
+                if (testJob?.isCancelled == true) error("Le test des serveurs a été annulé.")
+                val fastest = fastestProfileId(testLatencies)
+                    ?: error("Aucun serveur n'a répondu au test TCP.")
+                val profile = uiState.profiles.firstOrNull { it.id == fastest }
+                    ?: error("Le serveur le plus rapide n'existe plus.")
+                val latency = testLatencies[fastest] ?: error("Mesure de latence indisponible.")
+                val reconnected = dashboardViewModel.selectProfileAndReconnect(profile.id)
+                val outcome = if (reconnected) "Tunnel connecté" else "Serveur sélectionné"
+                Toast.makeText(
+                    context,
+                    "$outcome : ${profile.name} (${latency} ms)",
+                    Toast.LENGTH_LONG,
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    context,
+                    "Échec du changement de serveur : ${e.message ?: "connexion indisponible"}",
+                    Toast.LENGTH_LONG,
+                ).show()
+            } finally {
+                selectingFastest = false
+            }
         }
-        Toast.makeText(
-            context,
-            "Plus rapide : ${profile.name} (${testLatencies[fastest]} ms)",
-            Toast.LENGTH_SHORT,
-        ).show()
     }
 
     fun exportA2M(
@@ -740,8 +758,9 @@ fun A2MServersScreen(
                             },
                         )
                         A2MServerActionChip(
-                            label = "Sélectionner le plus rapide",
+                            label = if (selectingFastest) "Reconnexion…" else "Sélectionner le plus rapide",
                             icon = Icons.Filled.Speed,
+                            enabled = !selectingFastest && !testAllRunning,
                             onClick = { selectFastest() },
                         )
                         A2MServerActionChip(
@@ -1433,6 +1452,7 @@ private fun A2MServerActionChip(
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
+    val feedbackContext = LocalContext.current
     val accent = if (danger) A2MColors.Danger else A2MColors.Accent
     Row(
         modifier =
@@ -1444,7 +1464,7 @@ private fun A2MServerActionChip(
                 if (selected) accent.copy(alpha = 0.7f) else A2MColors.CardBorder,
                 A2MShapes.chip,
             )
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled) { A2MClickFeedback.applyConfigured(feedbackContext); onClick() }
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1488,6 +1508,7 @@ private fun ServerRow(
     onLongClick: () -> Unit,
     onMenu: () -> Unit,
 ) {
+    val feedbackContext = LocalContext.current
     val badgeSize =
         when (size) {
             ServerSize.SMALL -> 34.dp
@@ -1511,7 +1532,10 @@ private fun ServerRow(
                 color = if (selected) A2MColors.CardBorderSelected else A2MColors.CardBorder,
                 shape = A2MShapes.card,
             )
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(
+                onClick = { A2MClickFeedback.applyConfigured(feedbackContext); onClick() },
+                onLongClick = { A2MClickFeedback.applyConfigured(feedbackContext); onLongClick() },
+            )
             .padding(horizontal = 16.dp, vertical = verticalPadding),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1648,6 +1672,7 @@ private fun ServerGridCard(
     onMenu: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val feedbackContext = LocalContext.current
     val badgeSize =
         when (size) {
             ServerSize.SMALL -> 30.dp
@@ -1664,7 +1689,10 @@ private fun ServerGridCard(
                 if (selected) A2MColors.CardBorderSelected else A2MColors.CardBorder,
                 A2MShapes.card,
             )
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(
+                onClick = { A2MClickFeedback.applyConfigured(feedbackContext); onClick() },
+                onLongClick = { A2MClickFeedback.applyConfigured(feedbackContext); onLongClick() },
+            )
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -1797,6 +1825,7 @@ private fun ServerTableRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
+    val feedbackContext = LocalContext.current
     Row(
         modifier =
         Modifier
@@ -1808,7 +1837,10 @@ private fun ServerTableRow(
                 if (selected) A2MColors.CardBorderSelected else A2MColors.CardBorder,
                 A2MShapes.card,
             )
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(
+                onClick = { A2MClickFeedback.applyConfigured(feedbackContext); onClick() },
+                onLongClick = { A2MClickFeedback.applyConfigured(feedbackContext); onLongClick() },
+            )
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),

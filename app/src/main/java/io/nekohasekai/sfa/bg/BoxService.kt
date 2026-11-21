@@ -315,6 +315,12 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                     // The optional feature was rejected; continue with the VPN.
                     if (Settings.adBlockEnabled) {
                         Log.w(TAG, "Adblock disabled for this session after startup failure")
+                        GlobalEventBus.tryEmit(
+                            UiEvent.WarningMessage(
+                                "Le tunnel est connecté, mais l'Ad blocker n'a pas pu charger sa liste. " +
+                                    "Le blocage des publicités n'est pas actif pour cette session.",
+                            ),
+                        )
                     }
                 } else {
                     Log.w(TAG, "gVisor stack unavailable, retrying with system stack")
@@ -501,6 +507,12 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                     try {
                         commandServer.startOrReloadService(effectiveContent(content, adBlock = false), serviceOverride)
                         Log.w(TAG, "Tunnel reloaded without adblock after rule-set failure")
+                        GlobalEventBus.tryEmit(
+                            UiEvent.WarningMessage(
+                                "Le tunnel reste actif, mais l'Ad blocker n'a pas pu charger sa liste " +
+                                    "et n'est pas appliqué à cette session.",
+                            ),
+                        )
                     } catch (retryError: Exception) {
                         // Keep the current service alive when possible. A failed
                         // optional reload must not turn a connected VPN off.

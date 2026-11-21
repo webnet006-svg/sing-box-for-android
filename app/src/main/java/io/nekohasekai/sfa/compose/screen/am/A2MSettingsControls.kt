@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -40,6 +41,7 @@ internal fun A2MRadioCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val border = if (selected) 1.5.dp else 1.dp
     val borderColor = if (selected) A2MColors.Accent else A2MColors.CardBorder
     val selectedBrush = Brush.linearGradient(listOf(A2MColors.Accent.copy(alpha = 0.10f), A2MColors.Accent.copy(alpha = 0.10f)))
@@ -49,7 +51,7 @@ internal fun A2MRadioCard(
             .clip(A2MShapes.card)
             .background(brush = if (selected) selectedBrush else A2MColors.CardBrush)
             .border(border, borderColor, A2MShapes.card)
-            .clickable(onClick = onClick)
+            .clickable { A2MClickFeedback.applyConfigured(context); onClick() }
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -100,6 +102,7 @@ internal fun A2MQuickChip(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val context = LocalContext.current
     val shape = RoundedCornerShape(50)
     Box(
         contentAlignment = Alignment.Center,
@@ -108,7 +111,7 @@ internal fun A2MQuickChip(
             .clip(shape)
             .background(if (selected) A2MColors.Accent.copy(alpha = 0.16f) else Color.Transparent)
             .border(1.dp, if (selected) A2MColors.Accent else A2MColors.CardBorder, shape)
-            .clickable(onClick = onClick)
+            .clickable { A2MClickFeedback.applyConfigured(context); onClick() }
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         Text(
@@ -128,6 +131,7 @@ internal fun A2MSegmented(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val shape = RoundedCornerShape(14.dp)
     Row(
         modifier =
@@ -148,7 +152,7 @@ internal fun A2MSegmented(
                     .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
                     .background(if (selected) A2MColors.Accent.copy(alpha = 0.16f) else Color.Transparent)
-                    .clickable { onSelect(id) }
+                    .clickable { A2MClickFeedback.applyConfigured(context); onSelect(id) }
                     .padding(vertical = 10.dp),
             ) {
                 Text(

@@ -36,10 +36,11 @@ object A2MDesignTokens {
 
 /** Styles système : chiffres fixes sans téléchargement de police à l'exécution. */
 object A2MType {
-    val screenTitle = TextStyle(fontSize = 21.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.2.sp)
-    val cardTitle = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-    val body = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal)
-    val secondary = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.15.sp)
+    private val selectedFamily get() = A2MFontCatalog.family(A2MThemeState.fontId)
+    val screenTitle get() = TextStyle(fontFamily = selectedFamily, fontSize = 21.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.2.sp)
+    val cardTitle get() = TextStyle(fontFamily = selectedFamily, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+    val body get() = TextStyle(fontFamily = selectedFamily, fontSize = 14.sp, fontWeight = FontWeight.Normal)
+    val secondary get() = TextStyle(fontFamily = selectedFamily, fontSize = 12.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.15.sp)
     val metric = TextStyle(fontSize = 30.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 0.sp)
 }
 

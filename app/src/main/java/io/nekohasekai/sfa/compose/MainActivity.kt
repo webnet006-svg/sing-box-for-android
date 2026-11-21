@@ -993,6 +993,10 @@ class MainActivity :
                         showErrorDialog = true
                     }
 
+                    is UiEvent.WarningMessage -> {
+                        snackbarHostState.showSnackbar(event.message)
+                    }
+
                     is UiEvent.OpenUrl -> {
                         this@MainActivity.launchCustomTab(event.url)
                     }

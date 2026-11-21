@@ -1,5 +1,7 @@
 package io.nekohasekai.sfa.compose.screen.am
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Spacer
@@ -299,8 +301,6 @@ fun A2MAppearanceScreen(
     val scope = rememberCoroutineScope()
     val settings = A2MThemeState.settings
     val darkPalettes = A2MThemeCatalog.palettes.filter { it.isDark }
-    var clickFeedback by remember { mutableStateOf(Settings.clickFeedback) }
-    var showFeedbackDialog by remember { mutableStateOf(false) }
     var themeMessage by remember { mutableStateOf<String?>(null) }
 
     // Éditeur : repart du thème enregistré (ou du thème courant) à chaque application.
@@ -479,33 +479,7 @@ fun A2MAppearanceScreen(
                 )
             }
 
-            A2MSettingsGroup(title = "Retour tactile", icon = Icons.Filled.Palette) {
-                A2MSettingRow(
-                    icon = Icons.Filled.Info,
-                    title = "Retour tactile",
-                    subtitle = "Sur chaque clic dans les réglages",
-                    value = clickFeedbackLabel(clickFeedback),
-                    onClick = { showFeedbackDialog = true },
-                )
-                if (showFeedbackDialog) {
-                    A2MChoiceDialog(
-                        title = "Retour tactile",
-                        options =
-                        listOf(
-                            A2MChoiceOption(A2MClickFeedback.SOUND, "Son"),
-                            A2MChoiceOption(A2MClickFeedback.VIBRATE, "Vibreur"),
-                            A2MChoiceOption(A2MClickFeedback.SILENT, "Silence"),
-                        ),
-                        selected = clickFeedback,
-                        onDismiss = { showFeedbackDialog = false },
-                        onSelect = {
-                            clickFeedback = it
-                            Settings.clickFeedback = it
-                            showFeedbackDialog = false
-                        },
-                    )
-                }
-            }
+            A2MInterfacePreferences()
 
             A2MInfoCard(
                 title = "Thème actuel",
@@ -580,6 +554,7 @@ fun A2MAboutScreen(
     modifier: Modifier = Modifier,
 ) {
     val scaffoldPadding = LocalScaffoldPadding.current
+    val context = LocalContext.current
     val coreVersion = remember { runCatching { Libbox.version() }.getOrDefault("—") }
     var serviceMode by remember { mutableStateOf(ServiceMode.VPN) }
     LaunchedEffect(Unit) {
@@ -616,6 +591,21 @@ fun A2MAboutScreen(
                 AboutRow("Version", BuildConfig.VERSION_NAME)
                 A2MDividerLine(inset = 14.dp)
                 AboutRow("Mode de service", if (serviceMode == ServiceMode.VPN) "VPN (TUN)" else "Proxy local")
+                A2MDividerLine(inset = 14.dp)
+                A2MSettingRow(
+                    icon = Icons.Filled.Download,
+                    title = "Mettre à jour",
+                    subtitle = "Consulter et télécharger les versions GitHub officielles",
+                    onClick = {
+                        runCatching {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/webnet006-svg/A2M-TUN/releases")),
+                            )
+                        }.onFailure {
+                            android.widget.Toast.makeText(context, "Impossible d'ouvrir GitHub.", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    },
+                )
             }
 
             A2MSettingsGroup(title = "Moteur", icon = Icons.Filled.Bolt) {

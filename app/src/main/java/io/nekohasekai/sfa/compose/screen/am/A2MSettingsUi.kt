@@ -113,7 +113,7 @@ fun A2MSettingRow(
             .then(
                 if (onClick != null) {
                     Modifier.clickable {
-                        A2MClickFeedback.apply(context, Settings.clickFeedback)
+                        A2MClickFeedback.applyConfigured(context)
                         onClick()
                     }
                 } else {
@@ -198,7 +198,7 @@ fun A2MSettingSwitchRow(
         Modifier
             .fillMaxWidth()
             .clickable {
-                A2MClickFeedback.apply(context, Settings.clickFeedback)
+                A2MClickFeedback.applyConfigured(context)
                 onCheckedChange(!checked)
             }
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -245,7 +245,7 @@ fun A2MSettingSwitchRow(
         Switch(
             checked = checked,
             onCheckedChange = {
-                A2MClickFeedback.apply(context, Settings.clickFeedback)
+                A2MClickFeedback.applyConfigured(context)
                 onCheckedChange(it)
             },
             colors =
@@ -392,7 +392,7 @@ fun A2MChoiceDialog(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
                             .clickable {
-                                A2MClickFeedback.apply(context, Settings.clickFeedback)
+                                A2MClickFeedback.applyConfigured(context)
                                 onSelect(option.value)
                             }
                             .padding(horizontal = 4.dp, vertical = 8.dp),
