@@ -81,6 +81,17 @@ object A2MConfigDecorations {
     private const val ADS_RULE_SET_URL =
         "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ads-all.srs"
 
+    /** Canonical host names keep DoH/DoT certificate validation working when a
+     * provider is selected through its well-known IP address. */
+    private fun canonicalDnsHost(value: String): String =
+        when (value.trim().removePrefix("[").removeSuffix("]")) {
+            "1.1.1.1", "1.0.0.1" -> "cloudflare-dns.com"
+            "8.8.8.8", "8.8.4.4" -> "dns.google"
+            "9.9.9.9", "149.112.112.112" -> "dns.quad9.net"
+            "94.140.14.14", "94.140.15.15" -> "dns.adguard-dns.com"
+            else -> value.trim()
+        }
+
     // ── Helpers partagés ─────────────────────────────────────────────────────
 
     private fun parseRoot(content: String): MutableMap<String, JsonElement> =
@@ -473,12 +484,18 @@ object A2MConfigDecorations {
             val remote = buildJsonObject {
                 put("type", override.type)
                 put("tag", "remote")
-                put("server", override.remoteServer)
+                val server =
+                    if (override.type in setOf("https", "tls", "quic")) {
+                        canonicalDnsHost(override.remoteServer)
+                    } else {
+                        override.remoteServer
+                    }
+                put("server", server)
                 if (override.type == "https") put("path", "/dns-query")
                 if (finalTag != null) put("detour", finalTag)
                 // Si le serveur distant est un nom, il est résolu par le
                 // bootstrap direct avant d'être joint via le proxy.
-                if (!isIpLiteral(override.remoteServer)) {
+                if (!isIpLiteral(server)) {
                     put("domain_resolver", "bootstrap")
                 }
             }
@@ -666,6 +683,10 @@ object A2MConfigDecorations {
             val outbounds = outboundListOf(root)
             val blockTag = ensureOutboundOfType(outbounds, "block")
             val directTag = ensureOutboundOfType(outbounds, "direct")
+            // Download the list through the selected proxy when available.
+            // Direct downloads happen before the tunnel is ready and fail on
+            // networks that block raw.githubusercontent.com.
+            val downloadDetour = proxyTagOf(root, outbounds) ?: directTag
             root["outbounds"] = JsonArray(outbounds)
 
             val route = routeMap(root)
@@ -685,7 +706,7 @@ object A2MConfigDecorations {
                         put("tag", ADS_RULE_SET_TAG)
                         put("format", "binary")
                         put("url", ADS_RULE_SET_URL)
-                        put("download_detour", directTag)
+                        put("download_detour", downloadDetour)
                     },
                 )
             }

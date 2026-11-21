@@ -294,11 +294,11 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                 Log.w(TAG, "gVisor stack unavailable, retrying with system stack")
                 try {
                     commandServer.startOrReloadService(fallbackContent, serviceOverride)
-                    GlobalEventBus.tryEmit(
-                        UiEvent.ErrorMessage(
-                            "Pile réseau « gVisor » indisponible dans ce noyau : tunnel démarré avec la pile système.",
-                        ),
-                    )
+                    // The fallback is expected on Android builds without the
+                    // optional gVisor implementation. Keep it out of the error
+                    // channel: the tunnel is healthy and a modal dialog here
+                    // incorrectly suggests that connection failed.
+                    Log.i(TAG, "Tunnel started with system stack after gVisor fallback")
                 } catch (retryError: Exception) {
                     stopAndAlert(Alert.CreateService, retryError.message)
                     return

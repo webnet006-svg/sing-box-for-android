@@ -38,7 +38,7 @@ class A2MConfigDecorationsTest {
 
         val ruleSet = root["route"]!!.jsonObject["rule_set"]!!.jsonArray[0].jsonObject
         assertEquals("remote", ruleSet["type"]!!.jsonPrimitive.content)
-        assertEquals("direct", ruleSet["download_detour"]!!.jsonPrimitive.content)
+        assertEquals("proxy", ruleSet["download_detour"]!!.jsonPrimitive.content)
         assertTrue(ruleSet["url"]!!.jsonPrimitive.content.contains("geosite-category-ads-all"))
     }
 
@@ -101,7 +101,7 @@ class A2MConfigDecorationsTest {
         assertEquals(2, servers.size)
         val remote = servers[0].jsonObject
         assertEquals("https", remote["type"]!!.jsonPrimitive.content)
-        assertEquals("1.1.1.1", remote["server"]!!.jsonPrimitive.content)
+        assertEquals("cloudflare-dns.com", remote["server"]!!.jsonPrimitive.content)
         assertEquals("/dns-query", remote["path"]!!.jsonPrimitive.content)
         assertEquals("proxy", remote["detour"]!!.jsonPrimitive.content)
         val bootstrap = servers[1].jsonObject
