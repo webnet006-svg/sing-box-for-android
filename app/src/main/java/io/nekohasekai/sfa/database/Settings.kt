@@ -72,7 +72,7 @@ object Settings {
 
     // ── Apparence : palette + mode, appliqués à toute l'UI ──
     var themeKey by dataStore.string(SettingsKey.THEME_KEY) { "a2m" }
-    var themeMode by dataStore.string(SettingsKey.THEME_MODE) { "light" }
+    var themeMode by dataStore.string(SettingsKey.THEME_MODE) { "dark" }
 
     /** Thème personnalisé actif, encodé en `.a2mtheme` compact (vide = aucun). */
     var customTheme by dataStore.string(SettingsKey.CUSTOM_THEME) { "" }

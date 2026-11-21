@@ -290,9 +290,9 @@ fun A2MSettingsScreen(
             }
         }
 
-        // ── Modes avancés ───────────────────────────────────────────────
+        // ── Configuration VPN ───────────────────────────────────────────
         item {
-            A2MSettingsGroup(title = "Modes avancés", icon = Icons.Filled.SportsEsports) {
+            A2MSettingsGroup(title = "Configuration VPN", icon = Icons.Filled.SportsEsports) {
                 A2MSettingSwitchRow(
                     icon = Icons.Filled.Shield,
                     title = "Ad blocker",
@@ -327,9 +327,9 @@ fun A2MSettingsScreen(
             }
         }
 
-        // ── Réseau ──────────────────────────────────────────────────────
+        // ── DNS ─────────────────────────────────────────────────────────
         item {
-            A2MSettingsGroup(title = "Réseau", icon = Icons.Filled.Dns) {
+            A2MSettingsGroup(title = "DNS", icon = Icons.Filled.Dns) {
                 A2MSettingRow(
                     icon = Icons.Filled.Dns,
                     title = "DNS",
@@ -344,7 +344,12 @@ fun A2MSettingsScreen(
                     iconTint = Color(0xFF2EAF6F),
                     onClick = { onNavigate(A2MRoutes.SETTINGS_DNS) },
                 )
-                A2MDividerLine(inset = 14.dp)
+            }
+        }
+
+        // ── Réseau ──────────────────────────────────────────────────────
+        item {
+            A2MSettingsGroup(title = "Réseau", icon = Icons.Filled.Route) {
                 A2MSettingRow(
                     icon = Icons.Filled.Route,
                     title = "Routage",
@@ -384,10 +389,10 @@ fun A2MSettingsScreen(
             }
         }
 
-        // ── Interface ───────────────────────────────────────────────────
+        // ── Apparence ───────────────────────────────────────────────────
         item {
             val themeSettings = A2MThemeState.settings
-            A2MSettingsGroup(title = "Interface", icon = Icons.Filled.Palette) {
+            A2MSettingsGroup(title = "Apparence", icon = Icons.Filled.Palette) {
                 A2MSettingRow(
                     icon = Icons.Filled.Palette,
                     title = "Apparence",
@@ -408,9 +413,9 @@ fun A2MSettingsScreen(
             }
         }
 
-        // ── Plus ────────────────────────────────────────────────────────
+        // ── Automatisation et à propos ──────────────────────────────────
         item {
-            A2MSettingsGroup(title = "Plus", icon = Icons.Filled.Info) {
+            A2MSettingsGroup(title = "Automatisation et à propos", icon = Icons.Filled.Info) {
                 A2MSettingRow(
                     icon = Icons.Filled.Link,
                     title = "Automatisation",

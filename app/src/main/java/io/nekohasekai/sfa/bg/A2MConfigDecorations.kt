@@ -136,6 +136,7 @@ object A2MConfigDecorations {
     }
 
     private val nonProxyOutboundTypes = setOf("direct", "block", "dns")
+    private val nonDialingOutboundTypes = nonProxyOutboundTypes + setOf("selector", "urltest")
 
     /** Serveurs DNS qui ne dialent pas eux-mêmes : un detour n'y a pas de sens. */
     private val nonDialingDnsTypes = setOf(
@@ -217,8 +218,47 @@ object A2MConfigDecorations {
                 dnsMutable.remove("fakeip")
             }
             root["dns"] = JsonObject(dnsMutable)
+
+            // Le proxy doit résoudre le nom de son endpoint avant que le tunnel
+            // soit prêt. Quand le profil déclare déjà un DNS direct, on le
+            // désigne explicitement comme résolveur de bootstrap et on préserve
+            // tout choix domain_resolver explicite du profil.
+            val bootstrapTag = directDnsResolverTag(dnsMutable["servers"] as? JsonArray)
+            if (bootstrapTag != null) {
+                root["outbounds"] = JsonArray(
+                    outbounds.map { element ->
+                        val outbound = element as? JsonObject ?: return@map element
+                        val type = outboundType(outbound)
+                        val server = (outbound["server"] as? JsonPrimitive)?.content
+                        if (type == null || type in nonDialingOutboundTypes || server.isNullOrBlank() ||
+                            isIpLiteral(server) || outbound.containsKey("domain_resolver")
+                        ) {
+                            element
+                        } else {
+                            JsonObject(outbound.toMutableMap().apply {
+                                put("domain_resolver", JsonPrimitive(bootstrapTag))
+                            })
+                        }
+                    },
+                )
+            }
             encode(root)
         }.getOrDefault(content)
+
+    /** Résolveur de démarrage déjà présent dans le profil, sans en inventer. */
+    private fun directDnsResolverTag(servers: JsonArray?): String? =
+        servers
+            ?.mapNotNull { it as? JsonObject }
+            ?.firstOrNull { server ->
+                val type = (server["type"] as? JsonPrimitive)?.content
+                val tag = (server["tag"] as? JsonPrimitive)?.content
+                val detour = (server["detour"] as? JsonPrimitive)?.content
+                tag != null && type in setOf("local", "dhcp", "udp", "tcp", "tls", "https", "quic") &&
+                    (type == "local" || type == "dhcp" || detour.isNullOrBlank())
+            }
+            ?.get("tag")
+            ?.let { it as? JsonPrimitive }
+            ?.content
 
     /**
      * Tags DNS utilisés pour résoudre des noms de serveurs (bootstrap/local).

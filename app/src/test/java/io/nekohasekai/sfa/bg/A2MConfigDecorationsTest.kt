@@ -252,6 +252,26 @@ class A2MConfigDecorationsTest {
     }
 
     @Test
+    fun normalizeDnsUsesDeclaredDirectResolverForProxyEndpointOnlyWhenUnset() {
+        val config =
+            """{"outbounds":[{"type":"trojan","tag":"proxy","server":"proxy.example"},{"type":"vless","tag":"explicit","server":"other.example","domain_resolver":"custom"}],""" +
+                """"dns":{"servers":[{"type":"udp","tag":"bootstrap","server":"1.1.1.1"}]}}"""
+        val root = parse(A2MConfigDecorations.normalizeDns(config))
+        val outbounds = root["outbounds"]!!.jsonArray
+        assertEquals("bootstrap", outbounds[0].jsonObject["domain_resolver"]!!.jsonPrimitive.content)
+        assertEquals("custom", outbounds[1].jsonObject["domain_resolver"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun normalizeDnsDoesNotChooseResolverRoutedThroughProxy() {
+        val config =
+            """{"outbounds":[{"type":"trojan","tag":"proxy","server":"proxy.example"}],""" +
+                """"dns":{"servers":[{"type":"https","tag":"remote","server":"dns.example","detour":"proxy"}]}}"""
+        val root = parse(A2MConfigDecorations.normalizeDns(config))
+        assertFalse(root["outbounds"]!!.jsonArray[0].jsonObject.containsKey("domain_resolver"))
+    }
+
+    @Test
     fun normalizeDnsRemovesProxyDetourFromResolverServer() {
         val config =
             """{"outbounds":[{"type":"vmess","tag":"proxy","server":"example.com","domain_resolver":"bootstrap"}],""" +

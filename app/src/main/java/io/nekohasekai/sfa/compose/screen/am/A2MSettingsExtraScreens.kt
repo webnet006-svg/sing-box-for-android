@@ -298,7 +298,7 @@ fun A2MAppearanceScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings = A2MThemeState.settings
-    val lightPalettes = A2MThemeCatalog.palettes.filter { !it.isDark }
+    val darkPalettes = A2MThemeCatalog.palettes.filter { it.isDark }
     var clickFeedback by remember { mutableStateOf(Settings.clickFeedback) }
     var showFeedbackDialog by remember { mutableStateOf(false) }
     var themeMessage by remember { mutableStateOf<String?>(null) }
@@ -309,7 +309,7 @@ fun A2MAppearanceScreen(
         remember(customRevision) {
             A2MThemeCatalog.storedCustom() ?: A2MThemeState.currentPackage()
         }
-    var customDark by remember(customRevision) { mutableStateOf(editorBase.dark) }
+    val customDark = true
     var accentHex by remember(customRevision) { mutableStateOf(editorBase.color("accent")) }
     var uploadHex by remember(customRevision) { mutableStateOf(editorBase.color("accentUpload")) }
     val customPreview = remember(customRevision, settings.paletteId) { A2MThemeCatalog.customPalette() }
@@ -377,17 +377,12 @@ fun A2MAppearanceScreen(
         ) {
             A2MExtraSubScreenHeader(
                 title = "Apparence",
-                subtitle = "Palettes, mode et thème personnalisé",
+                subtitle = "Palettes sombres et thème personnalisé",
                 onBack = onBack,
             )
 
             A2MSettingsGroup(title = "Mode d'affichage", icon = Icons.Filled.Palette) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    A2MThemeModeSelector(
-                        selected = settings.mode,
-                        onSelect = { A2MThemeState.setMode(it) },
-                    )
-                }
+                Text("Thème sombre actif", color = A2MColors.Accent, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(16.dp))
             }
 
             A2MSettingsGroup(title = "Palettes", icon = Icons.Filled.Palette) {
@@ -397,7 +392,7 @@ fun A2MAppearanceScreen(
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    (lightPalettes + customPreview).chunked(2).forEach { row ->
+                    (darkPalettes + customPreview).distinctBy { it.id }.chunked(2).forEach { row ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -431,33 +426,7 @@ fun A2MAppearanceScreen(
                         style = MaterialTheme.typography.labelLarge,
                         color = A2MColors.Muted,
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(true to "Sombre", false to "Clair").forEach { (dark, label) ->
-                            val isSelected = customDark == dark
-                            Box(
-                                modifier =
-                                Modifier
-                                    .weight(1f)
-                                    .clip(A2MShapes.chip)
-                                    .background(if (isSelected) A2MColors.Accent else A2MColors.Tile)
-                                    .border(
-                                        1.dp,
-                                        if (isSelected) A2MColors.Accent else A2MColors.CardBorder,
-                                        A2MShapes.chip,
-                                    )
-                                    .clickable { customDark = dark }
-                                    .padding(vertical = 8.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) androidx.compose.ui.graphics.Color.White else A2MColors.Muted,
-                                )
-                            }
-                        }
-                    }
+                    Text("Base sombre imposée par le thème A2M TUN", style = MaterialTheme.typography.bodySmall, color = A2MColors.Muted)
                     Text(
                         text = "Accent principal",
                         style = MaterialTheme.typography.labelLarge,

@@ -303,8 +303,21 @@ object A2MThemeCatalog {
     /** Thème personnalisé actif (créé par défaut si aucun n'a été enregistré). */
     fun customPalette(): A2MPalette =
         paletteFromPackage(
-            storedCustom() ?: ThemePackage.derive(dark = true, accent = "#FF16E0C4", accentUpload = "#FF7C5CFF"),
+            storedCustom()?.let(::forceDark) ?: ThemePackage.derive(dark = true, accent = "#FF16E0C4", accentUpload = "#FF7C5CFF"),
         )
+
+    private fun forceDark(data: ThemePackage.Data): ThemePackage.Data {
+        val base = palettes.first { it.id == "a2m" && it.isDark }.tokens
+        val requiredDarkColors = mapOf(
+            "backgroundTop" to hexOf(base.backgroundTop), "backgroundMid" to hexOf(base.backgroundMid),
+            "text" to hexOf(base.text), "textMuted" to hexOf(base.textMuted), "faint" to hexOf(base.faint),
+            "border" to hexOf(base.border), "cardTop" to hexOf(base.cardTop), "cardBottom" to hexOf(base.cardBottom),
+            "tile" to hexOf(base.tile), "danger" to hexOf(base.danger), "amber" to hexOf(base.amber),
+        )
+        return data.copy(dark = true, colors = data.colors + requiredDarkColors)
+    }
+
+    fun enforceDark(data: ThemePackage.Data): ThemePackage.Data = forceDark(data)
 
     /** Sérialise une palette intégrée pour l'export `.a2mtheme`. */
     fun packageOf(palette: A2MPalette): ThemePackage.Data =
@@ -336,12 +349,12 @@ object A2MThemeCatalog {
         val key = if (id == "onfaa") "azure" else id
         if (key == CUSTOM_ID) return customPalette()
         return palettes.firstOrNull { it.id == key && it.isDark == dark }
-            ?: palettes.first { it.id == "a2m" && !it.isDark }
+            ?: palettes.first { it.id == "a2m" && it.isDark }
     }
 
     fun paletteIds(): List<Pair<String, String>> =
         palettes
-            .filter { !it.isDark }
+            .filter { it.isDark }
             .map { it.id to it.label } + (CUSTOM_ID to "Personnalisé")
 }
 
@@ -358,15 +371,7 @@ object A2MThemeState {
     private var systemDark by mutableStateOf(false)
 
     /** Résout palette×mode selon le réglage (SYSTEM suit la configuration Android). */
-    fun currentPalette(): A2MPalette =
-        A2MThemeCatalog.forId(
-            settings.paletteId,
-            when (settings.mode) {
-                A2MThemeMode.SYSTEM -> systemDark
-                A2MThemeMode.LIGHT -> false
-                A2MThemeMode.DARK -> true
-            },
-        )
+    fun currentPalette(): A2MPalette = A2MThemeCatalog.forId(settings.paletteId, true)
 
     /** Signale la config système ; réapplique si le mode est SYSTEM. */
     fun applySystemDark(isDark: Boolean) {
@@ -386,7 +391,8 @@ object A2MThemeState {
                 else -> savedKey
             }
         if (key != savedKey) Settings.themeKey = key
-        settings = A2MThemeSettings(paletteId = key, mode = A2MThemeMode.fromKey(Settings.themeMode))
+        settings = A2MThemeSettings(paletteId = key, mode = A2MThemeMode.DARK)
+        Settings.themeMode = A2MThemeMode.DARK.key
         applySettings()
     }
 
@@ -397,14 +403,14 @@ object A2MThemeState {
     }
 
     fun setMode(mode: A2MThemeMode) {
-        settings = settings.copy(mode = mode)
-        Settings.themeMode = mode.key
+        settings = settings.copy(mode = A2MThemeMode.DARK)
+        Settings.themeMode = A2MThemeMode.DARK.key
         applySettings()
     }
 
     /** Enregistre et applique un thème personnalisé (créé ou importé). */
     fun applyCustom(data: ThemePackage.Data) {
-        Settings.customTheme = ThemePackage.encodeCompact(data)
+        Settings.customTheme = ThemePackage.encodeCompact(A2MThemeCatalog.enforceDark(data))
         settings = settings.copy(paletteId = A2MThemeCatalog.CUSTOM_ID)
         Settings.themeKey = A2MThemeCatalog.CUSTOM_ID
         customRevision++
@@ -433,12 +439,6 @@ object A2MThemeState {
 
     /** Applique immédiatement la palette résolue. */
     private fun applySettings() {
-        val dark =
-            when (settings.mode) {
-                A2MThemeMode.SYSTEM -> systemDark
-                A2MThemeMode.LIGHT -> false
-                A2MThemeMode.DARK -> true
-            }
-        A2MColors.applyPalette(A2MThemeCatalog.forId(settings.paletteId, dark).tokens)
+        A2MColors.applyPalette(A2MThemeCatalog.forId(settings.paletteId, true).tokens)
     }
 }

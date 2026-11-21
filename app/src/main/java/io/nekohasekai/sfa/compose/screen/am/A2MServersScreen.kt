@@ -45,6 +45,8 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.AlertDialog
@@ -91,9 +93,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 /**
@@ -125,9 +131,10 @@ fun A2MServersScreen(
 
     var pendingDelete by remember { mutableStateOf<Profile?>(null) }
     var pendingBulkDelete by remember { mutableStateOf(false) }
-    var protocols by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
-    var codes by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
-    var addresses by remember { mutableStateOf<Map<Long, String?>>(emptyMap()) }
+    var profileSummaries by remember { mutableStateOf<Map<Long, A2MProfileInfo.Summary>>(emptyMap()) }
+    val protocols = remember(profileSummaries) { profileSummaries.mapValues { it.value.protocol } }
+    val codes = remember(profileSummaries) { profileSummaries.mapValues { it.value.code } }
+    val addresses = remember(profileSummaries) { profileSummaries.mapValues { it.value.address } }
     var searchQuery by remember { mutableStateOf("") }
     var protocolFilter by remember { mutableStateOf<String?>(null) }
     var sort by remember { mutableStateOf(ServerSort.fromKey(Settings.serversSort)) }
@@ -143,6 +150,9 @@ fun A2MServersScreen(
     var testAllRunning by remember { mutableStateOf(false) }
     var testAllDone by remember { mutableStateOf(0) }
     var testAllTotal by remember { mutableStateOf(0) }
+    val favoritesPreferences = remember { context.getSharedPreferences("a2m_server_ui", android.content.Context.MODE_PRIVATE) }
+    var favoriteIds by remember { mutableStateOf(favoritesPreferences.getStringSet("favorites", emptySet()).orEmpty().mapNotNull { it.toLongOrNull() }.toSet()) }
+    var favoritesOnly by remember { mutableStateOf(false) }
     var showSortDialog by remember { mutableStateOf(false) }
     var showViewDialog by remember { mutableStateOf(false) }
 
@@ -160,15 +170,9 @@ fun A2MServersScreen(
         val profiles = uiState.profiles
         val maps =
             withContext(Dispatchers.IO) {
-                Triple(
-                    profiles.associate { it.id to A2MProfileInfo.protocolLabel(it) },
-                    profiles.associate { it.id to A2MProfileInfo.protocolCode(it) },
-                    profiles.associate { it.id to A2MProfileInfo.serverAddress(it) },
-                )
+                profiles.associate { it.id to A2MProfileInfo.summary(it) }
             }
-        protocols = maps.first
-        codes = maps.second
-        addresses = maps.third
+        profileSummaries = maps
         val ids = profiles.map { it.id }.toSet()
         selectedIds = selectedIds.intersect(ids)
         if (selectedIds.isEmpty()) selectionMode = false
@@ -235,7 +239,7 @@ fun A2MServersScreen(
             "Adresse inconnue" to (null as Long?)
         } else {
             when (val ms = A2MProfileInfo.tcpPing(target.first, target.second)) {
-                null -> "Échec" to (null as Long?)
+                null -> "✕ timeout" to (null as Long?)
                 else -> "TCP $ms ms" to ms.toLong()
             }
         }
@@ -270,12 +274,20 @@ fun A2MServersScreen(
         testAllJob =
             coroutineScope.launch {
                 try {
-                    for (profile in targets) {
-                        if (!isActive) break
-                        testingIds = testingIds + profile.id
-                        applyTestResult(profile, tcpResult(profile))
-                        testingIds = testingIds - profile.id
-                        testAllDone++
+                    val semaphore = Semaphore(4)
+                    kotlinx.coroutines.coroutineScope {
+                        targets.map { profile ->
+                            async {
+                                if (!isActive) return@async
+                                testingIds = testingIds + profile.id
+                                try {
+                                    applyTestResult(profile, semaphore.withPermit { tcpResult(profile) })
+                                } finally {
+                                    testingIds = testingIds - profile.id
+                                    testAllDone++
+                                }
+                            }
+                        }.awaitAll()
                     }
                 } finally {
                     testingIds = testingIds - targets.map { it.id }.toSet()
@@ -289,6 +301,12 @@ fun A2MServersScreen(
         testAllJob?.cancel()
         testAllJob = null
         testAllRunning = false
+    }
+
+    fun toggleFavorite(profile: Profile) {
+        val updated = if (profile.id in favoriteIds) favoriteIds - profile.id else favoriteIds + profile.id
+        favoriteIds = updated
+        favoritesPreferences.edit().putStringSet("favorites", updated.map { it.toString() }.toSet()).apply()
     }
 
     /** Ouvre la feuille d'export (liens, QR, .a2m, config brute) d'un profil. */
@@ -515,7 +533,7 @@ fun A2MServersScreen(
                     (protocols[profile.id] ?: "").contains(query, ignoreCase = true) ||
                     (addresses[profile.id] ?: "").contains(query, ignoreCase = true)
             val matchesProtocol = protocolFilter == null || protocols[profile.id] == protocolFilter
-            matchesQuery && matchesProtocol
+            matchesQuery && matchesProtocol && (!favoritesOnly || profile.id in favoriteIds)
         }
     fun statusRank(profile: Profile): Int {
         val result = testResults[profile.id]
@@ -543,6 +561,7 @@ fun A2MServersScreen(
                         { it.name.lowercase(Locale.getDefault()) },
                     ),
                 )
+            ServerSort.PING -> filteredProfiles.sortedWith(compareBy({ testLatencies[it.id] == null }, { testLatencies[it.id] ?: Long.MAX_VALUE }, { it.name.lowercase(Locale.getDefault()) }))
         }
     val selectedProfiles = uiState.profiles.filter { it.id in selectedIds }
 
@@ -741,6 +760,11 @@ fun A2MServersScreen(
                                 Settings.serversSize = next.key
                             },
                         )
+                        A2MServerActionChip(
+                            label = if (favoritesOnly) "Favoris" else "Tous / favoris",
+                            selected = favoritesOnly,
+                            onClick = { favoritesOnly = !favoritesOnly },
+                        )
                     }
                 }
 
@@ -798,7 +822,7 @@ fun A2MServersScreen(
                                 modifier = Modifier.fillMaxWidth(),
                             )
                             Text(
-                                text = "Les tests sont séquentiels et peuvent être arrêtés à tout moment.",
+                                text = "Quatre tests TCP au maximum tournent en parallèle. Le test peut être arrêté à tout moment.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = A2MColors.Muted,
                             )
@@ -838,6 +862,9 @@ fun A2MServersScreen(
                                     code = codes[profile.id] ?: "",
                                     address = addresses[profile.id],
                                     selected = profile.id == uiState.selectedProfileId,
+                                    active = profile.id == uiState.selectedProfileId && uiState.serviceStatus == io.nekohasekai.sfa.constant.Status.Started,
+                                    favorite = profile.id in favoriteIds,
+                                    onFavorite = { toggleFavorite(profile) },
                                     selectionMode = selectionMode,
                                     checked = profile.id in selectedIds,
                                     size = serverSize,
@@ -863,6 +890,7 @@ fun A2MServersScreen(
                             profile = profile,
                             protocol = protocols[profile.id] ?: A2MProfileInfo.typeLabel(profile),
                             selected = profile.id == uiState.selectedProfileId,
+                            active = profile.id == uiState.selectedProfileId && uiState.serviceStatus == io.nekohasekai.sfa.constant.Status.Started,
                             selectionMode = selectionMode,
                             checked = profile.id in selectedIds,
                             testResult = testResults[profile.id],
@@ -881,6 +909,9 @@ fun A2MServersScreen(
                             code = codes[profile.id] ?: "",
                             address = addresses[profile.id],
                             selected = profile.id == uiState.selectedProfileId,
+                            active = profile.id == uiState.selectedProfileId && uiState.serviceStatus == io.nekohasekai.sfa.constant.Status.Started,
+                            favorite = profile.id in favoriteIds,
+                            onFavorite = { toggleFavorite(profile) },
                             autoUpdateEnabled =
                             if (profile.typed.type == TypedProfile.Type.Remote) {
                                 profile.typed.autoUpdate
@@ -1183,7 +1214,7 @@ fun A2MServersScreen(
             title = { Text("Trier les serveurs", color = A2MColors.Text) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ServerSort.entries.forEach { option ->
+                    ServerSort.entries.filter { it != ServerSort.PING || testLatencies.isNotEmpty() }.forEach { option ->
                         TextButton(
                             onClick = {
                                 sort = option
@@ -1340,12 +1371,43 @@ private enum class ServerSort(
     NAME("name", "Nom"),
     PROTOCOL("protocol", "Protocole"),
     STATUS("status", "Statut"),
+    PING("ping", "Ping"),
     ;
 
     companion object {
         fun fromKey(key: String): ServerSort =
             entries.firstOrNull { it.key == key } ?: NAME
     }
+}
+
+/** Nettoyage purement visuel : le nom stocké, exporté et partagé reste intact. */
+private fun cleanServerDisplayName(rawName: String, protocol: String): String {
+    var name = rawName.ifBlank { "Sans nom" }.trim()
+    val known = setOf(protocol.lowercase(), "ss", "shadowsocks", "vm", "vmess", "vl", "vless", "tr", "trojan", "hy", "hysteria", "hysteria2", "tuic", "wireguard", "wg", "socks", "http", "anytls", "shadowtls", "ssh")
+    repeat(4) {
+        val match = Regex("^\\[([^]]+)]\\s*").find(name) ?: return name
+        if (match.groupValues[1].trim().lowercase() !in known) return name
+        name = name.substring(match.range.last + 1).trimStart()
+    }
+    return name.ifBlank { rawName.ifBlank { "Sans nom" } }
+}
+
+/** Pays dérivé du code figurant dans le nom d'hôte, sans requête réseau. */
+private fun countryLabel(host: String): String {
+    val countries = mapOf(
+        "us" to ("🇺🇸" to "États-Unis"), "sg" to ("🇸🇬" to "Singapour"),
+        "fr" to ("🇫🇷" to "France"), "de" to ("🇩🇪" to "Allemagne"),
+        "gb" to ("🇬🇧" to "Royaume-Uni"), "nl" to ("🇳🇱" to "Pays-Bas"),
+        "ca" to ("🇨🇦" to "Canada"), "au" to ("🇦🇺" to "Australie"),
+        "jp" to ("🇯🇵" to "Japon"), "kr" to ("🇰🇷" to "Corée du Sud"),
+        "in" to ("🇮🇳" to "Inde"), "br" to ("🇧🇷" to "Brésil"),
+        "tr" to ("🇹🇷" to "Turquie"), "ae" to ("🇦🇪" to "Émirats arabes unis"),
+        "za" to ("🇿🇦" to "Afrique du Sud"),
+    )
+    val pattern = Regex("(?i)(?:^|[.-])(${countries.keys.joinToString("|")})(?:-?\\d+)?(?=[.-]|$)")
+    val match = pattern.findAll(host).lastOrNull() ?: return host
+    val (flag, country) = countries[match.groupValues[1].lowercase()] ?: return host
+    return "$flag $country · $host"
 }
 
 private fun importSummary(result: ClipboardImporter.Imported): String =
@@ -1412,6 +1474,9 @@ private fun ServerRow(
     code: String,
     address: String?,
     selected: Boolean,
+    active: Boolean,
+    favorite: Boolean,
+    onFavorite: () -> Unit,
     autoUpdateEnabled: Boolean?,
     onToggleAutoUpdate: () -> Unit,
     selectionMode: Boolean,
@@ -1484,7 +1549,7 @@ private fun ServerRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = profile.name.ifBlank { "Sans nom" },
+                    text = cleanServerDisplayName(profile.name, protocol),
                     style =
                     if (size == ServerSize.LARGE) {
                         MaterialTheme.typography.titleLarge
@@ -1497,12 +1562,12 @@ private fun ServerRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                if (selected) {
+                if (active || selected) {
                     Text(
-                        text = "SÉLECTIONNÉ",
+                        text = if (active) "ACTIF" else "SÉLECTIONNÉ",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = A2MColors.Accent,
+                        color = if (active) A2MDesignTokens.success else A2MColors.Accent,
                         modifier =
                         Modifier
                             .clip(A2MShapes.chip)
@@ -1513,7 +1578,7 @@ private fun ServerRow(
                 }
             }
             Text(
-                text = address?.takeIf { it.isNotBlank() } ?: "$protocol · ${A2MProfileInfo.typeLabel(profile)}",
+                text = address?.takeIf { it.isNotBlank() }?.let(::countryLabel) ?: "$protocol · ${A2MProfileInfo.typeLabel(profile)}",
                 style =
                 if (size == ServerSize.SMALL) {
                     MaterialTheme.typography.labelSmall
@@ -1548,6 +1613,9 @@ private fun ServerRow(
                 )
             }
         }
+        IconButton(onClick = onFavorite, modifier = Modifier.size(40.dp)) {
+            Icon(if (favorite) Icons.Filled.Star else Icons.Outlined.StarBorder, contentDescription = if (favorite) "Retirer des favoris" else "Ajouter aux favoris", tint = if (favorite) A2MDesignTokens.warning else A2MColors.Muted)
+        }
         IconButton(onClick = onMenu) {
             Icon(
                 imageVector = Icons.Filled.MoreVert,
@@ -1567,6 +1635,9 @@ private fun ServerGridCard(
     code: String,
     address: String?,
     selected: Boolean,
+    active: Boolean,
+    favorite: Boolean,
+    onFavorite: () -> Unit,
     selectionMode: Boolean,
     checked: Boolean,
     size: ServerSize,
@@ -1618,13 +1689,18 @@ private fun ServerGridCard(
                 }
             }
             Spacer(modifier = Modifier.weight(1f))
-            if (selected) {
+            IconButton(onClick = onFavorite, modifier = Modifier.size(36.dp)) {
+                Icon(if (favorite) Icons.Filled.Star else Icons.Outlined.StarBorder, contentDescription = if (favorite) "Retirer des favoris" else "Ajouter aux favoris", tint = if (favorite) A2MDesignTokens.warning else A2MColors.Muted)
+            }
+            if (active) {
                 Text(
                     text = "ACTIF",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
-                    color = A2MColors.Accent,
+                    color = A2MDesignTokens.success,
                 )
+            } else if (selected) {
+                Text("SÉLECTIONNÉ", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = A2MColors.Accent)
             }
             IconButton(onClick = onMenu, modifier = Modifier.size(28.dp)) {
                 Icon(
@@ -1636,7 +1712,7 @@ private fun ServerGridCard(
             }
         }
         Text(
-            text = profile.name.ifBlank { "Sans nom" },
+            text = cleanServerDisplayName(profile.name, protocol),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = A2MColors.Text,
@@ -1644,7 +1720,7 @@ private fun ServerGridCard(
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = address?.takeIf { it.isNotBlank() } ?: protocol,
+            text = address?.takeIf { it.isNotBlank() }?.let(::countryLabel) ?: protocol,
             style = MaterialTheme.typography.labelSmall,
             color = A2MColors.Muted,
             maxLines = 1,
@@ -1713,6 +1789,7 @@ private fun ServerTableRow(
     profile: Profile,
     protocol: String,
     selected: Boolean,
+    active: Boolean,
     selectionMode: Boolean,
     checked: Boolean,
     testResult: String?,
@@ -1740,7 +1817,7 @@ private fun ServerTableRow(
             Checkbox(checked = checked, onCheckedChange = { onClick() })
         }
         Text(
-            text = profile.name.ifBlank { "Sans nom" },
+            text = cleanServerDisplayName(profile.name, protocol),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = A2MColors.Text,
@@ -1759,7 +1836,8 @@ private fun ServerTableRow(
         Text(
             text =
             when {
-                selected -> "Actif"
+                active -> "ACTIF"
+                selected -> "SÉLECTIONNÉ"
                 testing -> "Test…"
                 testResult != null -> testResult
                 else -> "—"
@@ -1768,6 +1846,7 @@ private fun ServerTableRow(
             fontWeight = FontWeight.SemiBold,
             color =
             when {
+                active -> A2MDesignTokens.success
                 selected -> A2MColors.Accent
                 testing -> A2MColors.Faint
                 testResult?.endsWith("ms") == true -> A2MColors.Accent

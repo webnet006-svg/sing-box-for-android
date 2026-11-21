@@ -12,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -61,12 +62,14 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.nekohasekai.sfa.bg.BoxService
+import io.nekohasekai.sfa.R
 import io.nekohasekai.sfa.compose.base.GlobalEventBus
 import io.nekohasekai.sfa.compose.base.UiEvent
 import io.nekohasekai.sfa.compose.navigation.A2MRoutes
@@ -74,15 +77,19 @@ import io.nekohasekai.sfa.compose.screen.dashboard.DashboardUiState
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardViewModel
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
 import io.nekohasekai.sfa.constant.Status
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.runtime.DisposableEffect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
-private val A2M_ORB_BRUSH = Brush.radialGradient(listOf(Color(0xFF116D7C), Color(0xFF0A4B5A)))
-private val A2M_ORB_GLOW = Brush.radialGradient(listOf(Color(0x3D0FA98F), Color(0x000FA98F)))
+private val A2M_ORB_BRUSH = Brush.radialGradient(listOf(Color(0xFF0B4162), Color(0xFF06152E)))
+private val A2M_ORB_GLOW = Brush.radialGradient(listOf(Color(0x4420DFFF), Color(0x0020DFFF)))
 
 /** État « froid » de l'orbe : halo menthe, comme la référence. */
-private val A2M_IDLE_RING = Color(0xFF7ED8CC)
+private val A2M_IDLE_RING = A2MDesignTokens.blue
 
 /** 4250 -> "1:10:50" ; 95 -> "1:35" */
 private fun formatSession(seconds: Long): String {
@@ -101,6 +108,16 @@ fun A2MTUNHomeScreen(
 ) {
     val uiState by dashboardViewModel.uiState.collectAsState()
     val scaffoldPadding = LocalScaffoldPadding.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var screenVisible by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) screenVisible = true
+            if (event == Lifecycle.Event.ON_PAUSE) screenVisible = false
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     var toastMessage by remember { mutableStateOf<String?>(null) }
     var connectionError by remember { mutableStateOf(false) }
@@ -108,36 +125,35 @@ fun A2MTUNHomeScreen(
     // IP réelle du réseau mobile : relue depuis le système toutes les 3 s tant que
     // l'écran est visible (fonctionne même sans data active).
     var cellularIp by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        while (true) {
+    var protocolLabel by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(uiState.selectedProfileId, uiState.profiles) {
+        val profile = uiState.profiles.firstOrNull { it.id == uiState.selectedProfileId }
+        protocolLabel = withContext(Dispatchers.IO) { profile?.let { A2MProfileInfo.summary(it).protocol } }
+    }
+    LaunchedEffect(screenVisible) {
+        while (screenVisible) {
             cellularIp = withContext(Dispatchers.IO) { A2MNetworkInfo.readCellularIp() }
             delay(3000)
         }
     }
 
-    // Chrono de session : démarre au passage réel à Started (donnée du moteur, pas un ornement).
-    var connectedAt by remember { mutableLongStateOf(0L) }
-    var sessionSeconds by remember { mutableLongStateOf(0L) }
-
-    LaunchedEffect(serviceStatus) {
-        when (serviceStatus) {
-            Status.Started -> {
-                connectedAt = System.currentTimeMillis()
+    // Chrono fondé sur l'heure de démarrage publiée par le moteur, y compris
+    // quand l'écran est rouvert après avoir consulté Serveurs ou Réglages.
+    var wallClock by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(serviceStatus, screenVisible) {
+        if (serviceStatus == Status.Started && screenVisible) {
+            while (screenVisible && serviceStatus == Status.Started) {
+                wallClock = System.currentTimeMillis()
+                delay(1000)
             }
-            Status.Stopped -> {
-                connectedAt = 0L
-                sessionSeconds = 0L
-            }
-            else -> Unit
         }
     }
-
-    LaunchedEffect(connectedAt > 0) {
-        while (connectedAt > 0) {
-            sessionSeconds = (System.currentTimeMillis() - connectedAt) / 1000
-            delay(1000)
+    val sessionSeconds =
+        if (serviceStatus == Status.Started && uiState.serviceStartTime != null) {
+            ((wallClock - uiState.serviceStartTime) / 1000L).coerceAtLeast(0L)
+        } else {
+            0L
         }
-    }
 
     LaunchedEffect(toastMessage) {
         val message = toastMessage
@@ -184,17 +200,16 @@ fun A2MTUNHomeScreen(
                 Box(
                     modifier =
                     Modifier
-                        .size(36.dp)
+                        .size(40.dp)
                         .clip(RoundedCornerShape(11.dp))
                         .background(A2MColors.Tile)
                         .border(1.dp, A2MColors.CardBorderSelected.copy(alpha = 0.55f), RoundedCornerShape(11.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Shield,
-                        contentDescription = null,
-                        tint = A2MColors.Accent,
-                        modifier = Modifier.size(20.dp),
+                    androidx.compose.foundation.Image(
+                        painter = painterResource(R.drawable.a2m_tun_logo),
+                        contentDescription = "Logo A2M TUN",
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
                 Text(
@@ -230,10 +245,15 @@ fun A2MTUNHomeScreen(
                 isBusy = isBusy,
                 hasFailed = hasFailed,
                 sessionSeconds = sessionSeconds,
+                enabled = uiState.selectedProfileId != -1L,
+                animationsEnabled = screenVisible,
                 onClick = {
                     connectionError = false
                     when (serviceStatus) {
-                        Status.Stopped -> GlobalEventBus.tryEmit(UiEvent.RequestStartService)
+                        Status.Stopped -> {
+                            if (uiState.selectedProfileId == -1L) onNavigate(A2MRoutes.SERVERS)
+                            else GlobalEventBus.tryEmit(UiEvent.RequestStartService)
+                        }
                         Status.Starting, Status.Started -> BoxService.stop()
                         else -> Unit
                     }
@@ -245,6 +265,9 @@ fun A2MTUNHomeScreen(
                 hasFailed = hasFailed,
                 isConnected = isConnected,
                 isBusy = isBusy,
+                hasServer = uiState.selectedProfileId != -1L,
+                serverName = uiState.selectedProfileName,
+                sessionSeconds = sessionSeconds,
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -267,6 +290,7 @@ fun A2MTUNHomeScreen(
             A2MConfigNameCard(
                 hasServer = uiState.selectedProfileId != -1L,
                 name = uiState.selectedProfileName,
+                protocol = protocolLabel,
                 cellularIp = cellularIp,
                 onClick = { onNavigate(A2MRoutes.SERVERS) },
             )
@@ -291,7 +315,7 @@ fun A2MTUNHomeScreen(
                     .padding(horizontal = 24.dp)
                     .padding(bottom = 110.dp)
                     .clip(A2MShapes.card)
-                    .background(Color(0xF2FFFFFF))
+                    .background(A2MDesignTokens.background.copy(alpha = 0.96f))
                     .border(1.dp, A2MColors.CardBorder, A2MShapes.card)
                     .padding(horizontal = 18.dp, vertical = 12.dp),
             )
@@ -307,21 +331,26 @@ private fun A2MConnectionOrb(
     isBusy: Boolean,
     hasFailed: Boolean,
     sessionSeconds: Long,
+    enabled: Boolean,
+    animationsEnabled: Boolean,
     onClick: () -> Unit,
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "orb")
-    val pulse by infiniteTransition.animateFloat(
-        initialValue = 0.55f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1400), RepeatMode.Reverse),
-        label = "pulse",
-    )
-    val glowAlpha = if (isConnected) pulse else if (isBusy) 0.25f else 0.35f
+    val pulse = if (animationsEnabled) {
+        val infiniteTransition = rememberInfiniteTransition(label = "orb")
+        val animatedPulse by infiniteTransition.animateFloat(
+            initialValue = 0.55f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(1400), RepeatMode.Reverse),
+            label = "pulse",
+        )
+        animatedPulse
+    } else 0.72f
+    val glowAlpha = if (!animationsEnabled) 0.55f else if (isConnected) pulse else if (isBusy) 0.25f else 0.35f
     val stateColor by animateColorAsState(
         targetValue =
         when {
             hasFailed -> A2MColors.Danger
-            isConnected -> Color(0xFF2BD4BC)
+            isConnected -> A2MDesignTokens.success
             isBusy -> A2MColors.Amber
             else -> A2M_IDLE_RING
         },
@@ -329,18 +358,20 @@ private fun A2MConnectionOrb(
         label = "ring",
     )
 
-    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        val orbSize = maxWidth.coerceAtMost(280.dp)
+        val dialSize = (orbSize * 0.94f).coerceAtLeast(200.dp)
         // Halo
         Box(
             modifier =
             Modifier
-                .size(240.dp)
+                .size(dialSize)
                 .graphicsLayer { this.alpha = glowAlpha }
                 .clip(CircleShape)
                 .background(A2M_ORB_GLOW),
         )
         // Graduations radiales (cadran)
-        Canvas(modifier = Modifier.size(224.dp)) {
+        Canvas(modifier = Modifier.size(dialSize * 0.93f)) {
             val strokeWidth = 2.dp.toPx()
             val radius = size.minDimension / 2f
             val inner = radius - 12.dp.toPx()
@@ -362,7 +393,7 @@ private fun A2MConnectionOrb(
         Box(
             modifier =
             Modifier
-                .size(156.dp)
+                .size(orbSize * 0.68f)
                 .clip(CircleShape)
                 .background(A2M_ORB_BRUSH)
                 .border(2.dp, stateColor, CircleShape)
@@ -390,7 +421,7 @@ private fun A2MConnectionOrb(
                     when {
                         isConnected -> formatSession(sessionSeconds)
                         isBusy -> "—:—"
-                        else -> "CONNECTER"
+                    else -> if (enabled) "CONNECTER" else "SERVEURS"
                     },
                     style =
                     if (isConnected || isBusy) {
@@ -420,6 +451,9 @@ private fun A2MStatusCard(
     hasFailed: Boolean,
     isConnected: Boolean,
     isBusy: Boolean,
+    hasServer: Boolean,
+    serverName: String?,
+    sessionSeconds: Long,
 ) {
     Column(
         modifier =
@@ -465,12 +499,19 @@ private fun A2MStatusCard(
                 hasFailed -> "Échec de connexion · touchez l'orbe pour réessayer"
                 isConnected -> "Prêt · tunnel actif"
                 isBusy -> "Négociation en cours…"
-                else -> "Prêt · touchez pour connecter"
+                else -> if (hasServer) "Prêt · touchez pour connecter" else "Sélectionnez un serveur pour commencer"
             },
             style = MaterialTheme.typography.bodyMedium,
             color = A2MColors.Muted,
             modifier = Modifier.padding(top = 2.dp),
         )
+        if ((isConnected || isBusy) && !serverName.isNullOrBlank()) {
+            Text(serverName, style = A2MType.secondary, color = A2MColors.Muted, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
+        }
+        if (isConnected) {
+            Text("Durée · ${formatSession(sessionSeconds)}", style = A2MType.secondary, color = A2MColors.Muted, modifier = Modifier.padding(top = 4.dp))
+        }
     }
 }
 
@@ -700,6 +741,7 @@ private fun RowScope.VerticalRule() {
 private fun A2MConfigNameCard(
     hasServer: Boolean,
     name: String?,
+    protocol: String?,
     cellularIp: String?,
     onClick: () -> Unit,
 ) {
@@ -725,17 +767,7 @@ private fun A2MConfigNameCard(
                 color = A2MColors.Text,
                 modifier = Modifier.weight(1f),
             )
-            Text(
-                text = if (hasServer) "Vérifiée" else "Aucune",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (hasServer) Color.White else A2MColors.Muted,
-                modifier =
-                Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(if (hasServer) A2MColors.Accent else A2MColors.Tile)
-                    .padding(horizontal = 12.dp, vertical = 5.dp),
-            )
+            if (!protocol.isNullOrBlank()) A2MStatusBadge(protocol, A2MBadgeTone.ACCENT)
         }
 
         Text(
