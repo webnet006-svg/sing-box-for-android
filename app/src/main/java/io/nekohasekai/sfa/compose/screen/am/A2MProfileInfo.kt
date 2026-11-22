@@ -140,8 +140,10 @@ internal object A2MProfileInfo {
         }.getOrNull()
 
     /**
-     * Test TCP réel : ouvre une socket vers host:port et mesure la durée de
-     * l'établissement (résolution DNS incluse). Retourne null en échec.
+     * Test TCP réel : prend deux échantillons indépendants vers host:port et
+     * conserve la médiane des réponses réussies. Une seule mesure peut être
+     * artificiellement basse ou haute à cause du réseau mobile ; la médiane
+     * rend le classement plus stable sans masquer un échec complet.
      */
     suspend fun tcpPing(
         host: String,
@@ -149,14 +151,22 @@ internal object A2MProfileInfo {
         timeoutMs: Int = Settings.connectionTimeoutSec.coerceIn(1, 120) * 1000,
     ): Int? =
         withContext(Dispatchers.IO) {
-            runCatching {
-                val start = System.nanoTime()
-                java.net.Socket().use { socket ->
-                    check(VPNService.protectProbeSocket(socket)) { "Impossible d'isoler le test du tunnel VPN actif" }
-                    socket.connect(java.net.InetSocketAddress(host, port), timeoutMs)
+            val samples = buildList {
+                repeat(2) {
+                    val sample = runCatching {
+                        val start = System.nanoTime()
+                        java.net.Socket().use { socket ->
+                            check(VPNService.protectProbeSocket(socket)) {
+                                "Impossible d'isoler le test du tunnel VPN actif"
+                            }
+                            socket.connect(java.net.InetSocketAddress(host, port), timeoutMs)
+                        }
+                        ((System.nanoTime() - start) / 1_000_000L).toInt()
+                    }.getOrNull()
+                    if (sample != null) add(sample)
                 }
-                ((System.nanoTime() - start) / 1_000_000L).toInt()
-            }.getOrNull()
+            }
+            samples.sorted().getOrNull(samples.size / 2)?.toInt()
         }
 
     /** Serveurs DNS réellement déclarés dans la configuration (lecture seule). */
