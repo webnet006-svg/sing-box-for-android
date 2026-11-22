@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
+import java.net.InetSocketAddress
 
 /**
  * Lecture d'informations réelles sur une configuration enregistrée.
@@ -155,12 +156,25 @@ internal object A2MProfileInfo {
                 repeat(2) {
                     val sample = runCatching {
                         val start = System.nanoTime()
-                        java.net.Socket().use { socket ->
-                            check(VPNService.protectProbeSocket(socket)) {
-                                "Impossible d'isoler le test du tunnel VPN actif"
+                        val addresses = VPNService.resolveProbeAddresses(host)
+                        require(addresses.isNotEmpty()) { "Résolution DNS impossible" }
+                        var connected = false
+                        var lastFailure: Throwable? = null
+                        for (address in addresses) {
+                            try {
+                                java.net.Socket().use { socket ->
+                                    check(VPNService.protectProbeSocket(socket)) {
+                                        "Impossible d'isoler le test du tunnel VPN actif"
+                                    }
+                                    socket.connect(InetSocketAddress(address, port), timeoutMs)
+                                }
+                                connected = true
+                                break
+                            } catch (failure: Throwable) {
+                                lastFailure = failure
                             }
-                            socket.connect(java.net.InetSocketAddress(host, port), timeoutMs)
                         }
+                        if (!connected) throw (lastFailure ?: java.io.IOException("Connexion impossible"))
                         ((System.nanoTime() - start) / 1_000_000L).toInt()
                     }.getOrNull()
                     if (sample != null) add(sample)
