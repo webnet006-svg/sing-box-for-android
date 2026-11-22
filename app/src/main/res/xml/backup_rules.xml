@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
-
-    <!-- Keep user preferences, but never migrate VPN credentials/config payloads. -->
+    <!--
+        settings.db contains authentication data (including the GitHub token),
+        VPN preferences and connection settings. Backup rules cannot exclude a
+        single Room row, so use an intentionally nonexistent allowlisted file.
+        This keeps older Android backup/restore from exporting app databases,
+        profiles or configuration files.
+    -->
     <include
         domain="database"
-        path="settings.db" />
+        path="a2m_backup_disabled_sentinel" />
 
 </full-backup-content>

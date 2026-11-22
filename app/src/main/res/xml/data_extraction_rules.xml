@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
+    <!-- Keep both cloud restore and device transfer on the same deny-by-default allowlist. -->
     <cloud-backup>
         <include
             domain="database"
-            path="settings.db" />
+            path="a2m_backup_disabled_sentinel" />
     </cloud-backup>
     <device-transfer>
         <include
             domain="database"
-            path="settings.db" />
+            path="a2m_backup_disabled_sentinel" />
     </device-transfer>
 </data-extraction-rules>
