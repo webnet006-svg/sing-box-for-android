@@ -500,30 +500,29 @@ fun A2MServersScreen(
                 val unsupported = withContext(Dispatchers.IO) {
                     targets.filter { A2MProfileInfo.tcpProbeUnsupportedReason(it) != null }
                 }
-                if (unsupported.isNotEmpty()) {
-                    error(
-                        "Sélection automatique annulée : ${unsupported.size} serveur(s) utilisent UDP/QUIC. " +
-                            "Un test TCP ne permet pas de les comparer sans les déclarer à tort indisponibles.",
-                    )
+                val comparableTargets = targets.filterNot { it in unsupported }
+                if (comparableTargets.isEmpty()) {
+                    error("Aucun serveur ne peut être comparé avec le test TCP ; les profils UDP/QUIC sont conservés.")
                 }
                 // Mesure fraîche pour cette sélection : une ancienne latence ne
                 // doit pas envoyer le tunnel vers un serveur devenu indisponible.
                 testResults = emptyMap()
                 testLatencies = emptyMap()
-                testProfiles(targets)
+                testProfiles(comparableTargets)
                 val testJob = testAllJob
                 testJob?.join()
                 if (testJob?.isCancelled == true) error("Le test des serveurs a été annulé.")
                 val fastest = fastestProfileId(testLatencies)
-                    ?: error("Aucun serveur n'a répondu au test TCP.")
+                    ?: error("Aucun serveur comparable n'a répondu au test TCP ; les profils UDP/QUIC n'ont pas été déclarés indisponibles.")
                 val profile = uiState.profiles.firstOrNull { it.id == fastest }
                     ?: error("Le serveur le plus rapide n'existe plus.")
                 val latency = testLatencies[fastest] ?: error("Mesure de latence indisponible.")
                 val reconnected = dashboardViewModel.selectProfileAndReconnect(profile.id)
                 val outcome = if (reconnected) "Tunnel connecté" else "Serveur sélectionné"
+                val skipped = if (unsupported.isNotEmpty()) " · ${unsupported.size} profil(s) UDP/QUIC non comparé(s)" else " · meilleure latence TCP"
                 Toast.makeText(
                     context,
-                    "$outcome : ${profile.name} (${latency} ms)",
+                    "$outcome : ${profile.name} (${latency} ms)$skipped",
                     Toast.LENGTH_LONG,
                 ).show()
             } catch (e: Exception) {

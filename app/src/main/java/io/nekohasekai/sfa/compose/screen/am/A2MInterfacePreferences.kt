@@ -3,6 +3,8 @@ package io.nekohasekai.sfa.compose.screen.am
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -40,6 +42,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.nekohasekai.sfa.database.Settings
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 @Composable
 internal fun A2MInterfacePreferences() {
@@ -162,25 +167,66 @@ internal fun A2MInterfacePreferences() {
 
 @Composable
 private fun A2MOrbAnimationPreview(id: String, selected: Boolean) {
-    var phase = 0f
+    var alpha = 0.65f
     var rotation = 0f
+    var scaleX = 1f
+    var scaleY = 1f
     if (selected && id != "steady") {
         val transition = rememberInfiniteTransition(label = "orb-preview-$id")
-        val animated by transition.animateFloat(
-            initialValue = 0.35f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(if (id == "breathe") 2400 else 1200), RepeatMode.Reverse),
-            label = "orb-preview-phase",
-        )
-        phase = animated
-        if (id == "orbit" || id == "scan") {
-            val rotate by transition.animateFloat(0f, 360f, infiniteRepeatable(tween(4200), RepeatMode.Restart), label = "orb-preview-rotation")
-            rotation = rotate
+        when (id) {
+            "pulse" -> {
+                val phase by transition.animateFloat(0.28f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "preview-pulse")
+                alpha = phase
+            }
+            "orbit" -> {
+                val rotate by transition.animateFloat(0f, 360f, infiniteRepeatable(tween(7200, easing = LinearEasing), RepeatMode.Restart), label = "preview-orbit")
+                rotation = rotate
+            }
+            "wave" -> {
+                val phase by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(1900, easing = LinearEasing), RepeatMode.Restart), label = "preview-wave")
+                val angle = phase * 2f * PI.toFloat()
+                scaleX = 1f + 0.12f * sin(angle)
+                scaleY = 1f + 0.12f * cos(angle)
+            }
+            "spark" -> {
+                val flash by transition.animateFloat(
+                    0.24f,
+                    0.24f,
+                    infiniteRepeatable(
+                        keyframes {
+                            durationMillis = 1100
+                            0.24f at 0
+                            1f at 90
+                            0.3f at 180
+                            0.92f at 270
+                            0.24f at 390
+                            0.24f at 1100
+                        },
+                        RepeatMode.Restart,
+                    ),
+                    label = "preview-spark",
+                )
+                alpha = flash
+            }
+            "breathe" -> {
+                val phase by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(3200), RepeatMode.Reverse), label = "preview-breathe")
+                scaleX = 0.88f + phase * 0.24f
+                scaleY = scaleX
+                alpha = 0.55f + phase * 0.3f
+            }
+            "scan" -> {
+                val progress by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(2600, easing = LinearEasing), RepeatMode.Restart), label = "preview-scan")
+                rotation = progress * 360f
+            }
         }
     }
     Box(
-        modifier = Modifier.size(38.dp).graphicsLayer { rotationZ = rotation; alpha = if (selected) phase else 0.65f }
-            .border(2.dp, if (selected) A2MColors.Accent else A2MColors.CardBorder, CircleShape),
+        modifier = Modifier.size(38.dp).graphicsLayer {
+            rotationZ = rotation
+            this.alpha = alpha
+            this.scaleX = scaleX
+            this.scaleY = scaleY
+        }.border(2.dp, if (selected) A2MColors.Accent else A2MColors.CardBorder, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.size(14.dp).clip(CircleShape).background(A2MColors.Accent))

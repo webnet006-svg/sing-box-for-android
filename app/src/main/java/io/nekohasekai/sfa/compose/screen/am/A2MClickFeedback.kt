@@ -2,13 +2,13 @@ package io.nekohasekai.sfa.compose.screen.am
 
 import android.content.Context
 import android.media.AudioManager
-import android.media.ToneGenerator
+import android.media.AudioAttributes
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.media.SoundPool
+import io.nekohasekai.sfa.R
 import io.nekohasekai.sfa.database.Settings
 
 /**
@@ -20,22 +20,26 @@ object A2MClickFeedback {
     const val VIBRATE = "vibrate"
     const val SILENT = "silent"
 
-    data class ClickSound(val id: String, val label: String, val tone: Int)
+    data class ClickSound(val id: String, val label: String, val resourceId: Int)
 
     val sounds = listOf(
-        ClickSound("1", "Bip doux", ToneGenerator.TONE_PROP_BEEP),
-        ClickSound("2", "Bip clair", ToneGenerator.TONE_PROP_BEEP2),
-        ClickSound("3", "Note 2", ToneGenerator.TONE_DTMF_2),
-        ClickSound("4", "Validation", ToneGenerator.TONE_PROP_ACK),
-        ClickSound("5", "Alerte", ToneGenerator.TONE_PROP_NACK),
-        ClickSound("6", "Rappel", ToneGenerator.TONE_PROP_PROMPT),
-        ClickSound("7", "Note 1", ToneGenerator.TONE_DTMF_1),
-        ClickSound("8", "Note 3", ToneGenerator.TONE_DTMF_3),
-        ClickSound("9", "Note 6", ToneGenerator.TONE_DTMF_6),
-        ClickSound("10", "Note 9", ToneGenerator.TONE_DTMF_9),
+        ClickSound("1", "Bip doux montant", R.raw.a2m_click_01),
+        ClickSound("2", "Bip clair", R.raw.a2m_click_02),
+        ClickSound("3", "Double clic", R.raw.a2m_click_03),
+        ClickSound("4", "Validation ascendante", R.raw.a2m_click_04),
+        ClickSound("5", "Alerte descendante", R.raw.a2m_click_05),
+        ClickSound("6", "Rappel en trois notes", R.raw.a2m_click_06),
+        ClickSound("7", "Bip grave", R.raw.a2m_click_07),
+        ClickSound("8", "Accord cristallin", R.raw.a2m_click_08),
+        ClickSound("9", "Balayage montant", R.raw.a2m_click_09),
+        ClickSound("10", "Balayage descendant", R.raw.a2m_click_10),
     )
 
-    private var activeTone: ToneGenerator? = null
+    private var soundPool: SoundPool? = null
+    private val sampleIds = mutableMapOf<String, Int>()
+    private val loadedSamples = mutableSetOf<Int>()
+    private var pendingSampleId: Int? = null
+    private var activeStreamId = 0
 
     fun applyConfigured(context: Context) {
         if (Settings.a2mSoundsEnabled && !Settings.a2mSilenceMode) {
@@ -47,24 +51,48 @@ object A2MClickFeedback {
     fun previewSound(context: Context, id: String) = playSound(context, id)
 
     private fun playSound(context: Context, id: String) {
-        val sound = sounds.firstOrNull { it.id == id } ?: sounds.first()
         runCatching {
             synchronized(this) {
-                activeTone?.release()
-                activeTone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 70).also { generator ->
-                    generator.startTone(sound.tone, 120)
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        synchronized(this) {
-                            if (activeTone === generator) {
-                                generator.release()
-                                activeTone = null
-                            }
-                        }
-                    }, 180)
+                val appContext = context.applicationContext
+                val pool = soundPool ?: createSoundPool(appContext).also { soundPool = it }
+                val soundId = sounds.firstOrNull { it.id == id }?.id ?: sounds.first().id
+                val sampleId = sampleIds[soundId] ?: return
+                if (sampleId !in loadedSamples) {
+                    pendingSampleId = sampleId
+                    return
                 }
+                pendingSampleId = null
+                if (activeStreamId != 0) pool.stop(activeStreamId)
+                activeStreamId = pool.play(sampleId, 0.72f, 0.72f, 1, 0, 1f)
             }
         }
     }
+
+    private fun createSoundPool(context: Context): SoundPool =
+        SoundPool.Builder()
+            .setMaxStreams(1)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
+            .build()
+            .also { pool ->
+                pool.setOnLoadCompleteListener { completedPool, sampleId, status ->
+                    synchronized(this) {
+                        if (status == 0) {
+                            loadedSamples += sampleId
+                            if (pendingSampleId == sampleId) {
+                                pendingSampleId = null
+                                if (activeStreamId != 0) completedPool.stop(activeStreamId)
+                                activeStreamId = completedPool.play(sampleId, 0.72f, 0.72f, 1, 0, 1f)
+                            }
+                        }
+                    }
+                }
+                sounds.forEach { sound -> sampleIds[sound.id] = pool.load(context, sound.resourceId, 1) }
+            }
 
     private fun vibrate(context: Context) {
         val vibrator =

@@ -4,6 +4,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -85,6 +87,11 @@ import androidx.compose.runtime.DisposableEffect
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.sin
 
 private val A2M_ORB_BRUSH = Brush.radialGradient(listOf(Color(0xFF0B4162), Color(0xFF06152E)))
 private val A2M_ORB_GLOW = Brush.radialGradient(listOf(Color(0x4420DFFF), Color(0x0020DFFF)))
@@ -334,29 +341,82 @@ private fun A2MConnectionOrb(
     val animationStyle = A2MThemeState.orbAnimationId
     var animationPhase = 0.72f
     var ringRotation = 0f
+    var scanPhase = 0f
+    var haloScaleX = 1f
+    var haloScaleY = 1f
     if (animationsEnabled && isConnected && animationStyle != "steady") {
         val infiniteTransition = rememberInfiniteTransition(label = "orb")
-        val cycleMillis = when (animationStyle) {
-            "spark" -> 680
-            "breathe" -> 2600
-            "wave" -> 1900
-            else -> 1400
-        }
-        val animatedPhase by infiniteTransition.animateFloat(
-            initialValue = if (animationStyle == "spark") 0.22f else 0.48f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(cycleMillis), RepeatMode.Reverse),
-            label = "orb-phase",
-        )
-        animationPhase = animatedPhase
-        if (animationStyle == "orbit" || animationStyle == "scan") {
-            val animatedRotation by infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = 360f,
-                animationSpec = infiniteRepeatable(tween(if (animationStyle == "scan") 2600 else 7000), RepeatMode.Restart),
-                label = "orb-ring-rotation",
-            )
-            ringRotation = animatedRotation
+        when (animationStyle) {
+            "pulse" -> {
+                val phase by infiniteTransition.animateFloat(
+                    0.28f,
+                    1f,
+                    infiniteRepeatable(tween(900), RepeatMode.Reverse),
+                    label = "orb-pulse-alpha",
+                )
+                animationPhase = phase
+            }
+            "orbit" -> {
+                val rotation by infiniteTransition.animateFloat(
+                    0f,
+                    360f,
+                    infiniteRepeatable(tween(7200, easing = LinearEasing), RepeatMode.Restart),
+                    label = "orb-orbit-rotation",
+                )
+                ringRotation = rotation
+            }
+            "wave" -> {
+                val progress by infiniteTransition.animateFloat(
+                    0f,
+                    1f,
+                    infiniteRepeatable(tween(1900, easing = LinearEasing), RepeatMode.Restart),
+                    label = "orb-wave-phase",
+                )
+                val angle = progress * (2f * PI.toFloat())
+                animationPhase = 0.72f + 0.18f * sin(angle)
+                haloScaleX = 1f + 0.055f * sin(angle)
+                haloScaleY = 1f + 0.055f * cos(angle)
+            }
+            "spark" -> {
+                val phase by infiniteTransition.animateFloat(
+                    0.24f,
+                    0.24f,
+                    infiniteRepeatable(
+                        keyframes {
+                            durationMillis = 1100
+                            0.24f at 0
+                            1f at 90
+                            0.3f at 180
+                            0.92f at 270
+                            0.24f at 390
+                            0.24f at 1100
+                        },
+                        RepeatMode.Restart,
+                    ),
+                    label = "orb-spark-flashes",
+                )
+                animationPhase = phase
+            }
+            "breathe" -> {
+                val phase by infiniteTransition.animateFloat(
+                    0f,
+                    1f,
+                    infiniteRepeatable(tween(3200), RepeatMode.Reverse),
+                    label = "orb-breathe-phase",
+                )
+                haloScaleX = 0.96f + phase * 0.08f
+                haloScaleY = haloScaleX
+                animationPhase = 0.55f + phase * 0.3f
+            }
+            "scan" -> {
+                val progress by infiniteTransition.animateFloat(
+                    0f,
+                    1f,
+                    infiniteRepeatable(tween(2600, easing = LinearEasing), RepeatMode.Restart),
+                    label = "orb-scan-progress",
+                )
+                scanPhase = progress
+            }
         }
     }
     val glowAlpha = when {
@@ -384,7 +444,11 @@ private fun A2MConnectionOrb(
             modifier =
             Modifier
                 .size(dialSize)
-                .graphicsLayer { this.alpha = glowAlpha }
+                .graphicsLayer {
+                    alpha = glowAlpha
+                    scaleX = haloScaleX
+                    scaleY = haloScaleY
+                }
                 .clip(CircleShape)
                 .background(A2M_ORB_GLOW),
         )
@@ -396,9 +460,17 @@ private fun A2MConnectionOrb(
             val outer = radius - 4.dp.toPx()
             val ticks = 48
             repeat(ticks) { index ->
+                val relativeTick = index.toFloat() / ticks
+                val tickDistance = abs(relativeTick - scanPhase).let { min(it, 1f - it) }
+                val scanAlpha = if (animationStyle == "scan" && isConnected) {
+                    (1f - tickDistance / 0.16f).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+                val regularAlpha = if (index % 6 == 0) 0.85f else 0.38f
                 rotate(degrees = index * (360f / ticks)) {
                     drawLine(
-                        color = stateColor.copy(alpha = if (index % 6 == 0) 0.85f else 0.38f),
+                        color = stateColor.copy(alpha = maxOf(regularAlpha, scanAlpha)),
                         start = Offset(center.x, center.y - inner),
                         end = Offset(center.x, center.y - outer),
                         strokeWidth = strokeWidth,
