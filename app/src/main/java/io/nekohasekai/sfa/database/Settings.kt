@@ -141,7 +141,7 @@ object Settings {
     var adBlockEnabled by dataStore.boolean(SettingsKey.AD_BLOCK_ENABLED) { false }
 
     /** Contournement des réseaux privés (LAN) : trafic local hors du tunnel. */
-    var bypassPrivateNetworks by dataStore.boolean(SettingsKey.BYPASS_PRIVATE_NETWORKS) { true }
+    var bypassPrivateNetworks by dataStore.boolean(SettingsKey.BYPASS_PRIVATE_NETWORKS) { false }
 
     /** DNS personnalisé : remplace le DNS du profil par celui choisi ici. */
     var dnsOverrideEnabled by dataStore.boolean(SettingsKey.DNS_OVERRIDE_ENABLED) { false }
