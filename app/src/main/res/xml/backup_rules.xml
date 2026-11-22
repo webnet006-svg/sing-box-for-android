@@ -1,14 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
 
-    <include
-        domain="database"
-        path="profiles.db" />
+    <!-- Keep user preferences, but never migrate VPN credentials/config payloads. -->
     <include
         domain="database"
         path="settings.db" />
-    <include
-        domain="file"
-        path="configs" />
 
 </full-backup-content>

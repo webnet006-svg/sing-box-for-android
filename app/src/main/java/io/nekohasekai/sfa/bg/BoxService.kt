@@ -49,6 +49,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -56,10 +59,14 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 
+enum class AdBlockSessionState { Disabled, Loading, Active, Failed, Error }
+
 class BoxService(private val service: Service, private val platformInterface: PlatformInterface) : CommandServerHandler {
     companion object {
         private const val PROFILE_UPDATE_INTERVAL = 15L * 60 * 1000 // 15 minutes in milliseconds
         private const val TAG = "BoxService"
+        private val _adBlockSessionState = MutableStateFlow(AdBlockSessionState.Disabled)
+        val adBlockSessionState: StateFlow<AdBlockSessionState> = _adBlockSessionState.asStateFlow()
 
         @OptIn(DelicateCoroutinesApi::class)
         fun start() = GlobalScope.launch(Dispatchers.Main.immediate) {
@@ -274,6 +281,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                     return
                 }
                 effectiveContent = effectiveContent(content, adBlock = false)
+                _adBlockSessionState.value = AdBlockSessionState.Failed
                 Log.w(TAG, "Adblock configuration rejected, starting without adblock", e)
             }
 
@@ -294,7 +302,11 @@ class BoxService(private val service: Service, private val platformInterface: Pl
 
             try {
                 commandServer.startOrReloadService(effectiveContent, serviceOverride)
+                if (_adBlockSessionState.value in setOf(AdBlockSessionState.Loading, AdBlockSessionState.Error)) {
+                    _adBlockSessionState.value = AdBlockSessionState.Active
+                }
             } catch (e: Exception) {
+                if (Settings.adBlockEnabled) _adBlockSessionState.value = AdBlockSessionState.Error
                 // Filet de sécurité : noyau compilé sans gVisor + profil demandant gVisor/mixed
                 // => réécriture de la pile TUN en "system" et nouvelle tentative unique.
                 val fallbackContent = buildStackFallbackContent(effectiveContent, e.message)
@@ -303,6 +315,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                         val withoutAdBlock = effectiveContent(content, adBlock = false)
                         try {
                             commandServer.startOrReloadService(withoutAdBlock, serviceOverride)
+                            _adBlockSessionState.value = AdBlockSessionState.Failed
                             Log.w(TAG, "Tunnel started without adblock after rule-set failure")
                         } catch (retryError: Exception) {
                             stopAndAlert(Alert.CreateService, retryError.message)
@@ -326,6 +339,9 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                     Log.w(TAG, "gVisor stack unavailable, retrying with system stack")
                     try {
                         commandServer.startOrReloadService(fallbackContent, serviceOverride)
+                        if (_adBlockSessionState.value in setOf(AdBlockSessionState.Loading, AdBlockSessionState.Error)) {
+                            _adBlockSessionState.value = AdBlockSessionState.Active
+                        }
                         // The fallback is expected on Android builds without the
                         // optional gVisor implementation. Keep it out of the error
                         // channel: the tunnel is healthy and a modal dialog here
@@ -371,6 +387,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
      */
     /** Contenu effectivement chargé : config du profil + décorations A2M (LAN, DNS, moteur, pub). */
     private fun effectiveContent(raw: String, adBlock: Boolean = Settings.adBlockEnabled): String {
+        _adBlockSessionState.value = if (adBlock) AdBlockSessionState.Loading else AdBlockSessionState.Disabled
         val dnsOverride =
             if (Settings.dnsOverrideEnabled) {
                 A2MConfigDecorations.DnsOverride(
@@ -407,7 +424,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             } else {
                 null
             }
-        return A2MConfigDecorations.decorate(
+        val result = A2MConfigDecorations.decorateWithReport(
             raw = raw,
             bypassPrivate = Settings.bypassPrivateNetworks,
             dns = dnsOverride,
@@ -417,6 +434,23 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             tls = tls,
             gaming = Settings.gamingMode,
         )
+        if (result.failures.isNotEmpty() || result.skipped.isNotEmpty()) {
+            if (result.failures.any { it.setting == "Ad blocker" }) {
+                _adBlockSessionState.value = AdBlockSessionState.Failed
+            }
+            val details = buildList {
+                result.failures.forEach { add("• ${it.setting} : ${it.reason}") }
+                result.skipped.forEach { add("• ${it} : aucun élément compatible dans cette configuration") }
+            }.joinToString("\n")
+            Log.w(TAG, "Configuration VPN partiellement appliquée:\n$details")
+            GlobalEventBus.tryEmit(
+                UiEvent.WarningMessage(
+                    "Certaines options demandées n'ont pas été appliquées à cette session :\n$details\n" +
+                        "Le tunnel sera démarré si sa configuration reste valide.",
+                ),
+            )
+        }
+        return result.content
     }
 
     private fun buildStackFallbackContent(content: String, cause: String?): String? {
@@ -442,6 +476,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
     }
 
     override fun serviceStop() {
+        _adBlockSessionState.value = AdBlockSessionState.Disabled
         notification.close()
         status.postValue(Status.Starting)
         val pfd = fileDescriptor
@@ -481,7 +516,34 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             return
         }
         // Décoration A2M (bloqueur de pubs) appliquée aussi au rechargement.
-        val effectiveContent = effectiveContent(content)
+        var effectiveContent = effectiveContent(content)
+        try {
+            Libbox.checkConfig(effectiveContent)
+        } catch (error: Exception) {
+            if (!Settings.adBlockEnabled) {
+                Log.e(TAG, "Rejected invalid configuration reload; keeping current tunnel", error)
+                GlobalEventBus.tryEmit(
+                    UiEvent.ErrorMessage("Configuration invalide : le tunnel actuel est conservé. ${error.message.orEmpty()}"),
+                )
+                return
+            }
+            val withoutAdBlock = effectiveContent(content, adBlock = false)
+            try {
+                Libbox.checkConfig(withoutAdBlock)
+                effectiveContent = withoutAdBlock
+                _adBlockSessionState.value = AdBlockSessionState.Failed
+                GlobalEventBus.tryEmit(
+                    UiEvent.WarningMessage("La configuration Ad blocker est invalide. Le tunnel actuel est conservé ou rechargé sans blocage."),
+                )
+            } catch (fallbackError: Exception) {
+                _adBlockSessionState.value = AdBlockSessionState.Error
+                Log.e(TAG, "Rejected invalid reload and Ad blocker fallback; keeping current tunnel", fallbackError)
+                GlobalEventBus.tryEmit(
+                    UiEvent.ErrorMessage("La nouvelle configuration est invalide ; le tunnel actuel est conservé. ${fallbackError.message.orEmpty()}"),
+                )
+                return
+            }
+        }
         lastProfileName = profile.name
         val serviceOverride =
             OverrideOptions().apply {
@@ -497,7 +559,11 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             }
         try {
             commandServer.startOrReloadService(effectiveContent, serviceOverride)
+            if (_adBlockSessionState.value in setOf(AdBlockSessionState.Loading, AdBlockSessionState.Error)) {
+                _adBlockSessionState.value = AdBlockSessionState.Active
+            }
         } catch (e: Exception) {
+            if (Settings.adBlockEnabled) _adBlockSessionState.value = AdBlockSessionState.Error
             // Reloads (DNS/ad-block toggles) must use the same gVisor fallback
             // as the initial start. Otherwise the old service is torn down and
             // the UI reports a misleading RPC EOF while the tunnel is stopped.
@@ -506,6 +572,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                 if (Settings.adBlockEnabled) {
                     try {
                         commandServer.startOrReloadService(effectiveContent(content, adBlock = false), serviceOverride)
+                        _adBlockSessionState.value = AdBlockSessionState.Failed
                         Log.w(TAG, "Tunnel reloaded without adblock after rule-set failure")
                         GlobalEventBus.tryEmit(
                             UiEvent.WarningMessage(

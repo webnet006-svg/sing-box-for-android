@@ -363,25 +363,7 @@ class MainActivity :
     /** Liens d'automatisation : a2mtun://connect, disconnect, toggle, open, add/<lien>. */
     private fun handleA2MTunnelLink(uri: Uri) {
         when (uri.host) {
-            "connect" -> {
-                pendingNavigationRoute.value = "a2m/home"
-                startService()
-            }
-            "disconnect" -> {
-                lifecycleScope.launch(Dispatchers.IO) {
-                    BoxService.stop()
-                }
-            }
-            "toggle" -> {
-                if (currentServiceStatus == Status.Started || currentServiceStatus == Status.Starting) {
-                    lifecycleScope.launch(Dispatchers.IO) {
-                        BoxService.stop()
-                    }
-                } else {
-                    pendingNavigationRoute.value = "a2m/home"
-                    startService()
-                }
-            }
+            "connect", "disconnect", "toggle" -> confirmA2MCommand(uri.host!!)
             "open" -> Unit // l'app est déjà portée au premier plan par l'ouverture du lien
             "server", "config" -> {
                 val segment = uri.pathSegments?.firstOrNull()
@@ -449,6 +431,39 @@ class MainActivity :
             }
             else -> pendingIntentErrorMessage = "Action inconnue : ${uri.host}"
         }
+    }
+
+    /** Browsable custom schemes are callable by other apps, so VPN commands need a user gesture. */
+    private fun confirmA2MCommand(command: String) {
+        val action = when (command) {
+            "connect" -> "connecter le VPN"
+            "disconnect" -> "déconnecter le VPN"
+            else -> if (currentServiceStatus == Status.Started || currentServiceStatus == Status.Starting) {
+                "déconnecter le VPN"
+            } else {
+                "connecter le VPN"
+            }
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Commande A2M TUN")
+            .setMessage("Une application ou un lien demande à $action. Continuer ?")
+            .setNegativeButton("Annuler", null)
+            .setPositiveButton("Continuer") { _, _ ->
+                when (command) {
+                    "connect" -> {
+                        pendingNavigationRoute.value = "a2m/home"
+                        startService()
+                    }
+                    "disconnect" -> lifecycleScope.launch(Dispatchers.IO) { BoxService.stop() }
+                    "toggle" -> if (currentServiceStatus == Status.Started || currentServiceStatus == Status.Starting) {
+                        lifecycleScope.launch(Dispatchers.IO) { BoxService.stop() }
+                    } else {
+                        pendingNavigationRoute.value = "a2m/home"
+                        startService()
+                    }
+                }
+            }
+            .show()
     }
 
     @SuppressLint("NewApi")

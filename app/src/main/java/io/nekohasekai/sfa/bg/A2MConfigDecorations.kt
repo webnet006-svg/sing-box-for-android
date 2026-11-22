@@ -20,6 +20,15 @@ import kotlinx.serialization.json.put
  */
 object A2MConfigDecorations {
 
+    data class DecorationFailure(val setting: String, val reason: String)
+
+    data class DecorationResult(
+        val content: String,
+        val applied: Set<String>,
+        val skipped: Set<String>,
+        val failures: List<DecorationFailure>,
+    )
+
     /** Remplacement DNS choisi par l'utilisateur (types sing-box : https/tls/quic/udp). */
     data class DnsOverride(
         val type: String,
@@ -56,19 +65,74 @@ object A2MConfigDecorations {
         hotspotPort: Int?,
         tls: TlsOptions? = null,
         gaming: Boolean = false,
-    ): String {
+    ): String = decorateWithReport(raw, bypassPrivate, dns, engine, adBlock, hotspotPort, tls, gaming).content
+
+    /** Applies requested decorations and exposes failures to the service/UI. */
+    fun decorateWithReport(
+        raw: String,
+        bypassPrivate: Boolean,
+        dns: DnsOverride?,
+        engine: EngineOptions?,
+        adBlock: Boolean,
+        hotspotPort: Int?,
+        tls: TlsOptions? = null,
+        gaming: Boolean = false,
+    ): DecorationResult {
         // Les profils importés peuvent encore utiliser l'ancien format DNS,
         // supprimé par sing-box 1.14. On les normalise avant toute autre
         // décoration, même lorsque le DNS personnalisé est désactivé.
-        var content = runCatching { normalizeDns(raw) }.getOrDefault(raw)
-        if (bypassPrivate) content = runCatching { withBypassPrivateNetworks(content) }.getOrDefault(content)
-        if (dns != null) content = runCatching { withDnsOverride(content, dns) }.getOrDefault(content)
-        if (engine != null) content = runCatching { withEngine(content, engine) }.getOrDefault(content)
-        if (tls != null) content = runCatching { withTlsOptions(content, tls) }.getOrDefault(content)
-        if (gaming) content = runCatching { withGamingMode(content) }.getOrDefault(content)
-        if (hotspotPort != null) content = runCatching { withHotspotProxy(content, hotspotPort) }.getOrDefault(content)
-        if (adBlock) content = runCatching { withAdBlock(content) }.getOrDefault(content)
-        return content
+        var content = raw
+        val applied = linkedSetOf<String>()
+        val skipped = linkedSetOf<String>()
+        val failures = mutableListOf<DecorationFailure>()
+        fun apply(
+            setting: String,
+            requested: Boolean,
+            applicable: (String) -> Boolean = { true },
+            transform: (String) -> String,
+        ) {
+            if (!requested) return
+            runCatching { applicable(content) }
+                .onFailure { error -> failures += DecorationFailure(setting, error.message ?: error.javaClass.simpleName) }
+                .onSuccess { canApply ->
+                    if (!canApply) {
+                        skipped += setting
+                        return@onSuccess
+                    }
+                    runCatching { transform(content) }
+                        .onSuccess { updated -> content = updated; applied += setting }
+                        .onFailure { error -> failures += DecorationFailure(setting, error.message ?: error.javaClass.simpleName) }
+                }
+        }
+        apply(
+            "Normalisation DNS",
+            true,
+            applicable = { parseRoot(it)["dns"] is JsonObject },
+            transform = ::normalizeDns,
+        )
+        apply("Routage LAN", bypassPrivate, transform = ::withBypassPrivateNetworks)
+        apply("DNS personnalisé", dns != null) { withDnsOverride(it, requireNotNull(dns)) }
+        apply("Moteur réseau", engine != null) { withEngine(it, requireNotNull(engine)) }
+        apply(
+            "TLS / SNI",
+            tls != null,
+            applicable = { value ->
+                outboundListOf(parseRoot(value)).any { element ->
+                    val tlsObject = (element as? JsonObject)?.get("tls") as? JsonObject
+                    tlsObject != null && (tlsObject["enabled"] as? JsonPrimitive)?.content != "false"
+                }
+            },
+            transform = { withTlsOptions(it, requireNotNull(tls)) },
+        )
+        apply(
+            "Mode gaming",
+            gaming,
+            applicable = { value -> outboundListOf(parseRoot(value)).any { outboundType(it)?.let { type -> type !in nonDialingOutboundTypes } == true } },
+            transform = ::withGamingMode,
+        )
+        apply("Partage hotspot", hotspotPort != null) { withHotspotProxy(it, requireNotNull(hotspotPort)) }
+        apply("Ad blocker", adBlock, transform = ::withAdBlock)
+        return DecorationResult(content, applied, skipped, failures)
     }
 
     private val json =
@@ -243,7 +307,7 @@ object A2MConfigDecorations {
                 )
             }
             encode(root)
-        }.getOrDefault(content)
+        }.getOrThrow()
 
     /** Résolveur de démarrage déjà présent dans le profil, sans en inventer. */
     private fun directDnsResolverTag(servers: JsonArray?): String? =
@@ -492,7 +556,7 @@ object A2MConfigDecorations {
             )
             root["route"] = JsonObject(route)
             encode(root)
-        }.getOrDefault(content)
+        }.getOrThrow()
 
     // ── DNS personnalisé ─────────────────────────────────────────────────────
 
@@ -505,17 +569,14 @@ object A2MConfigDecorations {
         override: DnsOverride,
     ): String =
         runCatching {
-            // Un serveur vide ou un type inconnu rendrait la configuration invalide :
-            // on conserve alors le DNS du profil au lieu de casser le tunnel.
-            if (override.type !in setOf("https", "tls", "quic", "udp") ||
-                override.remoteServer.isBlank() ||
-                override.bootstrapServer.isBlank() ||
+            // Invalid overrides are reported to the service; never silently keep
+            // the old DNS while the preference claims the override is active.
+            require(override.type in setOf("https", "tls", "quic", "udp")) { "Type DNS non pris en charge : ${override.type}" }
+            require(override.remoteServer.isNotBlank()) { "Serveur DNS distant vide" }
+            require(override.bootstrapServer.isNotBlank() &&
                 // Le bootstrap est un serveur UDP sans resolver : il doit être
                 // une adresse IP littérale, sinon il ne peut pas démarrer.
-                !isIpLiteral(override.bootstrapServer)
-            ) {
-                return@runCatching content
-            }
+                isIpLiteral(override.bootstrapServer)) { "Le DNS bootstrap doit être une adresse IP" }
             val root = parseRoot(content)
             val outbounds = outboundListOf(root)
             val route = routeMap(root)
@@ -578,7 +639,7 @@ object A2MConfigDecorations {
             }
             root["route"] = JsonObject(route)
             encode(root)
-        }.getOrDefault(content)
+        }.getOrThrow()
 
     // ── Réglages moteur ──────────────────────────────────────────────────────
 
@@ -632,7 +693,7 @@ object A2MConfigDecorations {
             }
 
             encode(root)
-        }.getOrDefault(content)
+        }.getOrThrow()
 
     // ── Options TLS et gaming ────────────────────────────────────────────────
 
@@ -674,7 +735,7 @@ object A2MConfigDecorations {
                 },
             )
             encode(root)
-        }.getOrDefault(content)
+        }.getOrThrow()
 
     /**
      * Mode gaming : active TCP Fast Open et un keepalive court sur les sortants
@@ -699,7 +760,7 @@ object A2MConfigDecorations {
                 },
             )
             encode(root)
-        }.getOrDefault(content)
+        }.getOrThrow()
 
     // ── Partage par point d'accès ────────────────────────────────────────────
 
@@ -712,7 +773,7 @@ object A2MConfigDecorations {
         port: Int,
     ): String =
         runCatching {
-            if (port !in 1..65535) return@runCatching content
+            require(port in 1..65535) { "Port hotspot invalide : $port" }
             val root = parseRoot(content)
             val inbounds = (root["inbounds"] as? JsonArray)?.toMutableList() ?: mutableListOf()
             val hotspot = buildJsonObject {
@@ -729,7 +790,7 @@ object A2MConfigDecorations {
             }
             root["inbounds"] = JsonArray(inbounds)
             encode(root)
-        }.getOrDefault(content)
+        }.getOrThrow()
 
     // ── Bloqueur de publicités ───────────────────────────────────────────────
 
@@ -773,5 +834,5 @@ object A2MConfigDecorations {
             route["rule_set"] = JsonArray(ruleSets)
             root["route"] = JsonObject(route)
             encode(root)
-        }.getOrDefault(content)
+        }.getOrThrow()
 }

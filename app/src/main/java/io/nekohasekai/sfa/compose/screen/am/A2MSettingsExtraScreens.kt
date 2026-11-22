@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Shield
@@ -40,12 +41,15 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import io.nekohasekai.sfa.bg.AdBlockSessionState
+import io.nekohasekai.sfa.bg.BoxService
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -203,6 +207,7 @@ fun A2MAdvancedModesScreen(
 ) {
     val scaffoldPadding = LocalScaffoldPadding.current
     val notifyApplyChange = rememberApplyServiceChangeNotifier(serviceStatus)
+    val adBlockSessionState by BoxService.adBlockSessionState.collectAsState()
     var adBlock by remember { mutableStateOf(Settings.adBlockEnabled) }
     var gamingMode by remember { mutableStateOf(Settings.gamingMode) }
 
@@ -231,7 +236,18 @@ fun A2MAdvancedModesScreen(
                 A2MSettingSwitchRow(
                     icon = Icons.Filled.Shield,
                     title = "Ad blocker",
-                    subtitle = "Bloque les domaines publicitaires connus (geosite ads-all). Redémarrage du tunnel requis.",
+                    subtitle = buildString {
+                        append("Bloque les domaines publicitaires connus (geosite ads-all). Redémarrage du tunnel requis.\n")
+                        append(
+                            when (adBlockSessionState) {
+                                AdBlockSessionState.Disabled -> "Non actif dans la session"
+                                AdBlockSessionState.Loading -> "Chargement des règles…"
+                                AdBlockSessionState.Active -> "Actif dans la session du tunnel"
+                                AdBlockSessionState.Failed -> "Échec : non appliqué au tunnel actuel"
+                                AdBlockSessionState.Error -> "Échec du rechargement : état des règles non confirmé"
+                            },
+                        )
+                    },
                     checked = adBlock,
                     onCheckedChange = {
                         adBlock = it
@@ -239,6 +255,14 @@ fun A2MAdvancedModesScreen(
                         notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
                     },
                 )
+                if (adBlock && adBlockSessionState in setOf(AdBlockSessionState.Failed, AdBlockSessionState.Error)) {
+                    A2MSettingRow(
+                        icon = Icons.Filled.Refresh,
+                        title = "Réessayer le chargement",
+                        subtitle = "Recharge la configuration et la liste de blocage",
+                        onClick = { notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload) },
+                    )
+                }
             }
 
             A2MSettingsGroup(title = "Performance", icon = Icons.Filled.SportsEsports) {

@@ -7,6 +7,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -67,7 +68,7 @@ class A2MConfigDecorationsTest {
     @Test
     fun adBlockKeepsOriginalContentWhenUnparseable() {
         val broken = "ceci n'est pas du json"
-        assertEquals(broken, A2MConfigDecorations.withAdBlock(broken))
+        assertThrows(RuntimeException::class.java) { A2MConfigDecorations.withAdBlock(broken) }
     }
 
     // ── Contournement des réseaux privés ─────────────────────────────────────
@@ -143,7 +144,7 @@ class A2MConfigDecorationsTest {
             A2MConfigDecorations.DnsOverride(type = "https", remoteServer = "1.1.1.1", bootstrapServer = " "),
             A2MConfigDecorations.DnsOverride(type = "doit", remoteServer = "1.1.1.1", bootstrapServer = "1.1.1.1"),
         ).forEach { override ->
-            assertEquals(config, A2MConfigDecorations.withDnsOverride(config, override))
+            assertThrows(RuntimeException::class.java) { A2MConfigDecorations.withDnsOverride(config, override) }
         }
     }
 
@@ -194,13 +195,12 @@ class A2MConfigDecorationsTest {
     @Test
     fun dnsOverrideRejectsNonIpBootstrap() {
         val config = """{"outbounds":[{"type":"vmess","tag":"proxy"}],"dns":{"servers":[]}}"""
-        assertEquals(
-            config,
+        assertThrows(RuntimeException::class.java) {
             A2MConfigDecorations.withDnsOverride(
                 config,
                 A2MConfigDecorations.DnsOverride(type = "https", remoteServer = "1.1.1.1", bootstrapServer = "dns.google"),
-            ),
-        )
+            )
+        }
     }
 
     // ── Normalisation DNS legacy ──────────────────────────────────────────────
@@ -462,8 +462,8 @@ class A2MConfigDecorationsTest {
     @Test
     fun hotspotIgnoresInvalidPort() {
         val config = """{"outbounds":[{"type":"vmess","tag":"proxy"}]}"""
-        assertEquals(config, A2MConfigDecorations.withHotspotProxy(config, 0))
-        assertEquals(config, A2MConfigDecorations.withHotspotProxy(config, 70000))
+        assertThrows(RuntimeException::class.java) { A2MConfigDecorations.withHotspotProxy(config, 0) }
+        assertThrows(RuntimeException::class.java) { A2MConfigDecorations.withHotspotProxy(config, 70000) }
     }
 
     @Test
@@ -546,5 +546,39 @@ class A2MConfigDecorationsTest {
                 hotspotPort = null,
             ),
         )
+    }
+
+    @Test
+    fun decorateReportIdentifiesRequestedDecorationsThatFailed() {
+        val broken = "not json"
+        val result = A2MConfigDecorations.decorateWithReport(
+            raw = broken,
+            bypassPrivate = true,
+            dns = A2MConfigDecorations.DnsOverride("https", "1.1.1.1", "1.1.1.1"),
+            engine = null,
+            adBlock = true,
+            hotspotPort = null,
+        )
+        assertEquals(broken, result.content)
+        assertTrue(result.failures.any { it.setting == "Normalisation DNS" })
+        assertTrue(result.failures.any { it.setting == "DNS personnalisé" })
+        assertTrue(result.failures.any { it.setting == "Ad blocker" })
+        assertFalse("DNS personnalisé" in result.applied)
+    }
+
+    @Test
+    fun decorateReportDoesNotClaimTlsWasAppliedWhenProfileHasNoTlsOutbound() {
+        val config = """{"outbounds":[{"type":"vmess","tag":"proxy"}]}"""
+        val result = A2MConfigDecorations.decorateWithReport(
+            raw = config,
+            bypassPrivate = false,
+            dns = null,
+            engine = null,
+            adBlock = false,
+            hotspotPort = null,
+            tls = A2MConfigDecorations.TlsOptions(fragment = true, sniEnabled = false),
+        )
+        assertTrue("TLS / SNI" in result.skipped)
+        assertFalse("TLS / SNI" in result.applied)
     }
 }

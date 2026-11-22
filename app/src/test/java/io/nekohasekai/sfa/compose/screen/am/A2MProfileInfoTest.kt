@@ -52,6 +52,21 @@ class A2MProfileInfoTest {
     fun readsHysteria2Protocol() {
         val profile = profileWithConfig(config("hysteria2"))
         assertEquals("Hysteria2", A2MProfileInfo.protocolLabel(profile))
+        assertTrue(A2MProfileInfo.tcpProbeUnsupportedReason(profile)!!.contains("UDP/QUIC"))
+    }
+
+    @Test
+    fun tcpProbeRecognizesQuicTransportAsNotComparable() {
+        val profile = profileWithConfig(
+            """{"outbounds":[{"type":"vless","tag":"proxy","transport":{"type":"quic"}}]}""",
+        )
+        assertTrue(A2MProfileInfo.tcpProbeUnsupportedReason(profile)!!.contains("UDP/QUIC"))
+    }
+
+    @Test
+    fun tcpProbeAllowsTcpProtocols() {
+        val profile = profileWithConfig(config("vmess"))
+        assertEquals(null, A2MProfileInfo.tcpProbeUnsupportedReason(profile))
     }
 
     @Test

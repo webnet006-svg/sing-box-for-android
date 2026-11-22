@@ -235,6 +235,7 @@ fun A2MServersScreen(
      * incluse) est affichée. Échec honnête si la connexion ne s'établit pas.
      */
     suspend fun tcpResult(profile: Profile): Pair<String, Long?> {
+        A2MProfileInfo.tcpProbeUnsupportedReason(profile)?.let { return it to null }
         val target = withContext(Dispatchers.IO) { A2MProfileInfo.serverAddressAndPort(profile) }
         return if (target == null) {
             "Adresse inconnue" to (null as Long?)
@@ -496,6 +497,15 @@ fun A2MServersScreen(
         selectingFastest = true
         coroutineScope.launch {
             try {
+                val unsupported = withContext(Dispatchers.IO) {
+                    targets.filter { A2MProfileInfo.tcpProbeUnsupportedReason(it) != null }
+                }
+                if (unsupported.isNotEmpty()) {
+                    error(
+                        "Sélection automatique annulée : ${unsupported.size} serveur(s) utilisent UDP/QUIC. " +
+                            "Un test TCP ne permet pas de les comparer sans les déclarer à tort indisponibles.",
+                    )
+                }
                 // Mesure fraîche pour cette sélection : une ancienne latence ne
                 // doit pas envoyer le tunnel vers un serveur devenu indisponible.
                 testResults = emptyMap()

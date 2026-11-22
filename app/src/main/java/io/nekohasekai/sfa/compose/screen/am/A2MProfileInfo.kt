@@ -3,6 +3,7 @@ package io.nekohasekai.sfa.compose.screen.am
 import io.nekohasekai.sfa.database.Profile
 import io.nekohasekai.sfa.database.Settings
 import io.nekohasekai.sfa.database.TypedProfile
+import io.nekohasekai.sfa.bg.VPNService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -118,6 +119,26 @@ internal object A2MProfileInfo {
             server to port
         }.getOrNull()
 
+    /** A plain TCP connect cannot test protocols whose only transport is UDP/QUIC. */
+    fun tcpProbeUnsupportedReason(profile: Profile): String? =
+        runCatching {
+            val root = json.parseToJsonElement(File(profile.typed.path).readText()).jsonObject
+            val proxy = root["outbounds"]?.jsonArray
+                ?.mapNotNull { it as? JsonObject }
+                ?.firstOrNull { outbound ->
+                    val type = outbound["type"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    type.isNotBlank() && type !in NON_PROXY_TYPES
+                } ?: return@runCatching null
+            val type = proxy["type"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val transport = proxy["transport"] as? JsonObject
+            val transportType = transport?.get("type")?.jsonPrimitive?.contentOrNull.orEmpty()
+            if (type in setOf("hysteria", "hysteria2", "tuic", "wireguard") || transportType in setOf("quic", "udp")) {
+                "UDP/QUIC : le test TCP n'est pas applicable"
+            } else {
+                null
+            }
+        }.getOrNull()
+
     /**
      * Test TCP réel : ouvre une socket vers host:port et mesure la durée de
      * l'établissement (résolution DNS incluse). Retourne null en échec.
@@ -131,6 +152,7 @@ internal object A2MProfileInfo {
             runCatching {
                 val start = System.nanoTime()
                 java.net.Socket().use { socket ->
+                    check(VPNService.protectProbeSocket(socket)) { "Impossible d'isoler le test du tunnel VPN actif" }
                     socket.connect(java.net.InetSocketAddress(host, port), timeoutMs)
                 }
                 ((System.nanoTime() - start) / 1_000_000L).toInt()

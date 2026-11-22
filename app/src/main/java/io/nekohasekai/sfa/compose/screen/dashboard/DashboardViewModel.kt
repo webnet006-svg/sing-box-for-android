@@ -18,6 +18,7 @@ import io.nekohasekai.sfa.utils.CommandTarget
 import io.nekohasekai.sfa.utils.HTTPClient
 import io.nekohasekai.sfa.utils.RemoteControlManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -299,11 +300,14 @@ class DashboardViewModel :
     suspend fun selectProfileAndReconnect(profileId: Long): Boolean {
         check(!currentState.isLoading) { "Une autre opération sur les serveurs est en cours." }
         val wasConnected = _serviceStatus.value == Status.Started
+        val previousProfileId = withContext(Dispatchers.IO) { Settings.selectedProfile }
+        var selectionChanged = false
         updateState { copy(isLoading = true) }
         try {
             val profile = withContext(Dispatchers.IO) {
                 ProfileManager.get(profileId) ?: error("Le serveur sélectionné n'existe plus.")
             }
+            selectionChanged = true
             withContext(Dispatchers.IO) { Settings.selectedProfile = profileId }
             withContext(Dispatchers.Main) {
                 updateState {
@@ -320,6 +324,36 @@ class DashboardViewModel :
             sendGlobalEvent(UiEvent.RequestStartService)
             withTimeout(45_000L) { _serviceStatus.first { it == Status.Started } }
             return true
+        } catch (failure: Exception) {
+            if (selectionChanged) {
+                val rollback = runCatching {
+                    withContext(NonCancellable + Dispatchers.IO) { Settings.selectedProfile = previousProfileId }
+                    val previous = withContext(Dispatchers.IO) { ProfileManager.get(previousProfileId) }
+                    withContext(Dispatchers.Main) {
+                        updateState {
+                            copy(
+                                selectedProfileId = previousProfileId,
+                                selectedProfileName = previous?.name.orEmpty(),
+                            )
+                        }
+                    }
+                    if (wasConnected) {
+                        withContext(NonCancellable + Dispatchers.IO) {
+                            if (_serviceStatus.value != Status.Stopped) {
+                                BoxService.stop()
+                                withTimeout(15_000L) { _serviceStatus.first { it == Status.Stopped } }
+                            }
+                            sendGlobalEvent(UiEvent.RequestStartService)
+                            withTimeout(45_000L) { _serviceStatus.first { it == Status.Started } }
+                        }
+                    }
+                }
+                if (rollback.isFailure) {
+                    failure.addSuppressed(rollback.exceptionOrNull()!!)
+                    sendErrorMessage("Le changement a échoué et la reconnexion à l'ancien serveur n'a pas abouti.")
+                }
+            }
+            throw failure
         } finally {
             updateState { copy(isLoading = false) }
         }

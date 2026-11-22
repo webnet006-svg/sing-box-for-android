@@ -13,6 +13,7 @@ import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.sfa.database.Settings
 import io.nekohasekai.sfa.ktx.toIpPrefix
 import io.nekohasekai.sfa.ktx.toList
+import java.net.Socket
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -22,9 +23,19 @@ class VPNService :
     PlatformInterfaceWrapper {
     companion object {
         private const val TAG = "VPNService"
+
+        @Volatile private var activeInstance: VPNService? = null
+
+        /** Ensure connectivity probes bypass the VPN they are measuring. */
+        fun protectProbeSocket(socket: Socket): Boolean = activeInstance?.protect(socket) ?: true
     }
 
     private val service = BoxService(this, this)
+
+    override fun onCreate() {
+        super.onCreate()
+        activeInstance = this
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) = service.onStartCommand()
 
@@ -37,7 +48,12 @@ class VPNService :
     }
 
     override fun onDestroy() {
-        service.onDestroy()
+        try {
+            service.onDestroy()
+        } finally {
+            if (activeInstance === this) activeInstance = null
+            super.onDestroy()
+        }
     }
 
     override fun onRevoke() {
