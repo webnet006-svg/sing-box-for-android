@@ -323,6 +323,11 @@ class DashboardViewModel :
             withTimeout(15_000L) { _serviceStatus.first { it == Status.Stopped } }
             sendGlobalEvent(UiEvent.RequestStartService)
             withTimeout(45_000L) { _serviceStatus.first { it == Status.Started } }
+            // Do not report a successful server switch merely because the
+            // service process started. The status channel must also be alive
+            // and expose tunnel counters; otherwise the new profile may be
+            // running without a usable command/TUN session.
+            withTimeout(15_000L) { uiState.first { it.trafficVisible } }
             return true
         } catch (failure: Exception) {
             if (selectionChanged) {
@@ -345,6 +350,7 @@ class DashboardViewModel :
                             }
                             sendGlobalEvent(UiEvent.RequestStartService)
                             withTimeout(45_000L) { _serviceStatus.first { it == Status.Started } }
+                            withTimeout(15_000L) { uiState.first { it.trafficVisible } }
                         }
                     }
                 }
