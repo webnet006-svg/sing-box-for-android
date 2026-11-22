@@ -2,6 +2,8 @@ package io.nekohasekai.sfa.bg
 
 import android.content.Intent
 import android.content.pm.PackageManager.NameNotFoundException
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.ProxyInfo
 import android.net.VpnService
 import android.os.Build
@@ -13,6 +15,7 @@ import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.sfa.database.Settings
 import io.nekohasekai.sfa.ktx.toIpPrefix
 import io.nekohasekai.sfa.ktx.toList
+import java.net.InetAddress
 import java.net.Socket
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -28,6 +31,31 @@ class VPNService :
 
         /** Ensure connectivity probes bypass the VPN they are measuring. */
         fun protectProbeSocket(socket: Socket): Boolean = activeInstance?.protect(socket) ?: true
+
+        /**
+         * Resolve a probe host on a physical network. Android resolves a hostname
+         * before Socket.connect() when InetSocketAddress(host, port) is used;
+         * while a VPN is active that lookup can be routed into the tunnel and
+         * make a healthy endpoint look unavailable. Prefer non-VPN Wi-Fi/mobile
+         * networks and fall back to the platform resolver when no network is
+         * exposed (for example before the service is created).
+         */
+        fun resolveProbeAddresses(host: String): List<InetAddress> {
+            val instance = activeInstance ?: return runCatching { InetAddress.getAllByName(host).toList() }.getOrDefault(emptyList())
+            val connectivity = instance.getSystemService(ConnectivityManager::class.java)
+            val physical = connectivity?.allNetworks?.filter { network ->
+                val capabilities = connectivity.getNetworkCapabilities(network)
+                capabilities != null &&
+                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN) &&
+                    (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))
+            }.orEmpty()
+            val resolved = physical.flatMap { network ->
+                runCatching { network.getAllByName(host).toList() }.getOrDefault(emptyList())
+            }.distinctBy { it.hostAddress }
+            return if (resolved.isNotEmpty()) resolved else runCatching { InetAddress.getAllByName(host).toList() }.getOrDefault(emptyList())
+        }
     }
 
     private val service = BoxService(this, this)
