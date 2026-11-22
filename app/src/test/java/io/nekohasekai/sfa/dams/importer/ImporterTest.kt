@@ -43,6 +43,25 @@ class ImporterTest {
     }
 
     @Test
+    fun parsesVlessRealityVariantsWithoutParameterOrderDependency() {
+        val accepted = "vless://4db93c59-6639-4f2c-a4ba-43d218f6f041@Maxit-mobile.orange.bf.cdn.siakaouatta.site:442" +
+            "?security=reality&sni=www.cloudflare.com&fp=chrome&pbk=VSqYc4O4Qwpg0QvoKgJ6zNHTYrOvb3TdXSFoMpiOTw8&sid=18c3#%5BVless%5D%20damstunnel-realit"
+        val extended = "vless://4db93c59-6639-4f2c-a4ba-43d218f6f041@Maxit-mobile.orange.bf.cdn.siakaouatta.site:442" +
+            "?security=reality&encryption=none&pbk=VSqYc4O4Qwpg0QvoKgJ6zNHTYrOvb3TdXSFoMpiOTw8&headerType=none" +
+            "&fp=chrome&spx=%2Fc9206a914a564b4&type=tcp&sni=www.cloudflare.com&sid=18c3#damstunnel-realit"
+        val first = singleLink(Importer.parse(accepted)).profile
+        val second = singleLink(Importer.parse(extended)).profile
+        assertEquals(first.protocol, second.protocol)
+        assertEquals(first.host, second.host)
+        assertEquals(first.port, second.port)
+        assertEquals(first.outbound.str("uuid"), second.outbound.str("uuid"))
+        assertEquals(first.outbound.obj("tls").obj("reality").str("public_key"), second.outbound.obj("tls").obj("reality").str("public_key"))
+        assertEquals(first.outbound.obj("tls").obj("reality").str("short_id"), second.outbound.obj("tls").obj("reality").str("short_id"))
+        assertEquals("chrome", second.outbound.obj("tls").obj("utls").str("fingerprint"))
+        assertTrue(second.outbound["transport"] == null)
+    }
+
+    @Test
     fun parsesVmessJson() {
         val payload = """
             {"v":"2","ps":"VM Node","add":"vm.example.com","port":"8443","id":"uuid-1",
