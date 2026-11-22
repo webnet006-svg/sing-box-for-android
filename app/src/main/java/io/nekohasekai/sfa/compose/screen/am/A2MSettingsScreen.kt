@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
@@ -35,15 +34,12 @@ import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,36 +53,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.sfa.BuildConfig
-import io.nekohasekai.sfa.compose.base.rememberApplyServiceChangeNotifier
-import io.nekohasekai.sfa.compose.base.UiEvent
 import io.nekohasekai.sfa.compose.navigation.A2MRoutes
-import io.nekohasekai.sfa.compose.screen.dashboard.DashboardViewModel
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
-import io.nekohasekai.sfa.constant.Status
 import io.nekohasekai.sfa.database.Settings
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import android.provider.Settings as AndroidSettings
 
 /**
  * Écran Paramètres A2M TUN — toutes les entrées agissent sur le moteur réel.
  *
- * Toutes les options affichées sont raccordées : notification, bloqueur, DNS,
- * MTU, mux, hotspot, routage, logs, fragmentation TLS, SNI, gaming, reconnexion
- * réseau et comportement en arrière-plan. Les changements qui touchent la
- * configuration demandent un rechargement explicite du tunnel.
+ * Les réglages globaux de DNS et la catégorie Configuration VPN ont été retirés.
+ * Les DNS déclarés dans les profils restent gérés par le moteur et inchangés ici.
  */
 @Composable
 fun A2MSettingsScreen(
-    serviceStatus: Status,
     onNavigate: (String) -> Unit = {},
-    dashboardViewModel: DashboardViewModel,
     modifier: Modifier = Modifier,
 ) {
     val scaffoldPadding = LocalScaffoldPadding.current
     val context = LocalContext.current
-    val notifyApplyChange = rememberApplyServiceChangeNotifier(serviceStatus)
-
     val coreVersion = remember { runCatching { Libbox.version() }.getOrDefault("—") }
 
     // ID d'appareil réel (ANDROID_ID) pour la carte « ID de cet appareil ».
@@ -94,23 +78,10 @@ fun A2MSettingsScreen(
         AndroidSettings.Secure.getString(context.contentResolver, AndroidSettings.Secure.ANDROID_ID) ?: "—"
     }
 
-    // DNS réellement déclaré par la config active (pour le sous-titre de la ligne DNS).
-    val uiState by dashboardViewModel.uiState.collectAsState()
-    var dnsServers by remember { mutableStateOf<List<String>>(emptyList()) }
-    LaunchedEffect(uiState.selectedProfileId, uiState.profiles) {
-        val profile = uiState.profiles.firstOrNull { it.id == uiState.selectedProfileId }
-        dnsServers =
-            withContext(Dispatchers.IO) {
-                profile?.let { A2MProfileInfo.dnsServers(it) } ?: emptyList()
-            }
-    }
-
     var searchQuery by remember { mutableStateOf("") }
 
     // Options mémorisées (réelles + persistées) lues à chaque recomposition.
     var dynamicNotification by remember { mutableStateOf(Settings.dynamicNotification) }
-    var adBlock by remember { mutableStateOf(Settings.adBlockEnabled) }
-    var gamingMode by remember { mutableStateOf(Settings.gamingMode) }
 
     // Entrées de recherche : destinations réellement accessibles.
     data class Entry(val title: String, val subtitle: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val route: String, val keywords: List<String>)
@@ -118,10 +89,8 @@ fun A2MSettingsScreen(
     val entries =
         listOf(
             Entry("Connexion", "Notification, tests, reconnexion", Icons.Filled.Bolt, A2MRoutes.SETTINGS_CONNECTION, listOf("connexion", "notification", "timeout", "test", "vitesse", "reconnexion", "arrière-plan", "arriere-plan")),
-            Entry("Modes avancés", "Ad blocker, gaming, moteur", Icons.Filled.SportsEsports, A2MRoutes.SETTINGS_ADVANCED, listOf("avancé", "avance", "ad", "bloqueur", "publicité", "gaming", "jeu")),
             Entry("Anti-censorship", "Fragmentation TLS, SNI", Icons.Filled.Security, A2MRoutes.SETTINGS_ANTI_CENSORSHIP, listOf("anti", "censorship", "tls", "sni", "fragmentation", "fragment")),
-            Entry("DNS", "DoH, serveur DNS", Icons.Filled.Dns, A2MRoutes.SETTINGS_DNS, listOf("dns", "doh", "résolution", "serveur")),
-            Entry("Routage", "Applications et réseaux", Icons.Filled.Route, A2MRoutes.ROUTING, listOf("routage", "applications", "réseaux", "per", "app")),
+            Entry("Routage", "Tunnel intégral et groupes de sortie", Icons.Filled.Route, A2MRoutes.ROUTING, listOf("routage", "réseaux", "sortie", "groupe")),
             Entry("Moteur réseau", "MTU, mux, pile TUN", Icons.Filled.Memory, A2MRoutes.SETTINGS_ENGINE, listOf("moteur", "mtu", "mux", "pile", "tun", "gvisor")),
             Entry("Partage hotspot", "Proxy pour le partage", Icons.Filled.WifiTethering, A2MRoutes.SETTINGS_HOTSPOT, listOf("hotspot", "partage", "proxy", "socks")),
             Entry("IP Finder", "Trouver une IP du réseau mobile", Icons.Filled.NetworkCheck, A2MRoutes.IP_FINDER, listOf("ip", "finder", "mode", "avion", "recherche", "réseau")),
@@ -290,33 +259,9 @@ fun A2MSettingsScreen(
             }
         }
 
-        // ── Configuration VPN ───────────────────────────────────────────
+        // ── Anti-censorship conservé ─────────────────────────────────────
         item {
-            A2MSettingsGroup(title = "Configuration VPN", icon = Icons.Filled.SportsEsports) {
-                A2MSettingSwitchRow(
-                    icon = Icons.Filled.Shield,
-                    title = "Ad blocker",
-                    subtitle = "Bloque les publicités et traqueurs (routage réel, redémarrage du tunnel)",
-                    checked = adBlock,
-                    onCheckedChange = {
-                        adBlock = it
-                        Settings.adBlockEnabled = it
-                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
-                    },
-                )
-                A2MDividerLine(inset = 14.dp)
-                A2MSettingSwitchRow(
-                    icon = Icons.Filled.SportsEsports,
-                    title = "Mode gaming",
-                    subtitle = "TCP Fast Open + keepalive court sur les sortants (redémarrage)",
-                    checked = gamingMode,
-                    onCheckedChange = {
-                        gamingMode = it
-                        Settings.gamingMode = it
-                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
-                    },
-                )
-                A2MDividerLine(inset = 14.dp)
+            A2MSettingsGroup(title = "Anti-censorship", icon = Icons.Filled.Security) {
                 A2MSettingRow(
                     icon = Icons.Filled.Security,
                     title = "Anti-censorship",
@@ -327,33 +272,13 @@ fun A2MSettingsScreen(
             }
         }
 
-        // ── DNS ─────────────────────────────────────────────────────────
-        item {
-            A2MSettingsGroup(title = "DNS", icon = Icons.Filled.Dns) {
-                A2MSettingRow(
-                    icon = Icons.Filled.Dns,
-                    title = "DNS",
-                    subtitle =
-                    if (Settings.dnsOverrideEnabled) {
-                        "Personnalisé · ${Settings.dnsRemoteServer}"
-                    } else if (dnsServers.isEmpty()) {
-                        "Aucun serveur déclaré"
-                    } else {
-                        "${dnsServers.first()}${if (dnsServers.size > 1) " + ${dnsServers.size - 1} autre(s)" else ""}"
-                    },
-                    iconTint = Color(0xFF2EAF6F),
-                    onClick = { onNavigate(A2MRoutes.SETTINGS_DNS) },
-                )
-            }
-        }
-
         // ── Réseau ──────────────────────────────────────────────────────
         item {
             A2MSettingsGroup(title = "Réseau", icon = Icons.Filled.Route) {
                 A2MSettingRow(
                     icon = Icons.Filled.Route,
                     title = "Routage",
-                    subtitle = "Par application · groupes de sortie",
+                    subtitle = "Tunnel intégral · groupes de sortie",
                     iconTint = Color(0xFF2EAF6F),
                     onClick = { onNavigate(A2MRoutes.ROUTING) },
                 )

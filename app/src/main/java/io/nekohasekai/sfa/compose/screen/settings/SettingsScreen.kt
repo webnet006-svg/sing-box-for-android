@@ -17,7 +17,6 @@ import androidx.compose.material.icons.outlined.AdminPanelSettings
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Favorite
-import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SettingsRemote
@@ -163,29 +162,6 @@ fun SettingsScreen(navController: NavController) {
                         )
                     },
                     modifier = Modifier.clickable { navController.navigate("settings/service") },
-                    colors =
-                    ListItemDefaults.colors(
-                        containerColor = Color.Transparent,
-                    ),
-                )
-
-                ListItem(
-                    headlineContent = {
-                        Text(
-                            stringResource(R.string.profile_override),
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    },
-                    leadingContent = {
-                        Icon(
-                            imageVector = Icons.Outlined.FilterAlt,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    },
-                    modifier =
-                    Modifier
-                        .clickable { navController.navigate("settings/profile_override") },
                     colors =
                     ListItemDefaults.colors(
                         containerColor = Color.Transparent,

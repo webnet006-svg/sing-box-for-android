@@ -135,6 +135,85 @@ object A2MConfigDecorations {
         return DecorationResult(content, applied, skipped, failures)
     }
 
+    /**
+     * Applies the Android full-tunnel policy to a profile without changing its
+     * protocol settings. Every ordinary route is sent through a proxy outbound;
+     * direct outbounds remain available only for engine-owned bootstrap work.
+     */
+    fun enforceFullTunnel(content: String): String =
+        runCatching {
+            val root = parseRoot(content)
+            val outbounds = outboundListOf(root)
+            val directTags = outbounds.filter { outboundType(it) == "direct" }.mapNotNull(::outboundTag).toSet()
+            val route = routeMap(root)
+            val configuredFinal = (route["final"] as? JsonPrimitive)?.content
+            val selectedProxyTag =
+                configuredFinal?.takeIf { tag ->
+                    outbounds.any { outboundTag(it) == tag && outboundType(it)?.let { type -> type !in nonProxyOutboundTypes } == true }
+                } ?: outbounds.firstNotNullOfOrNull { outbound ->
+                    outboundTag(outbound)?.takeIf { outboundType(outbound)?.let { type -> type !in nonDialingOutboundTypes } == true }
+                } ?: error("Aucun sortant proxy utilisable : le tunnel intégral ne peut pas être garanti.")
+
+            val protectedOutbounds = outbounds.map { element ->
+                val outbound = element as? JsonObject ?: return@map element
+                val type = outboundType(outbound)
+                if (type != "selector" && type != "urltest") return@map element
+                val members = (outbound["outbounds"] as? JsonArray) ?: return@map element
+                val remaining = members.filterNot { (it as? JsonPrimitive)?.content?.let { tag -> tag in directTags } == true }
+                require(remaining.isNotEmpty()) {
+                    "Le groupe ${outboundTag(element).orEmpty()} ne contient aucun serveur proxy utilisable."
+                }
+                JsonObject(outbound.toMutableMap().apply { put("outbounds", JsonArray(remaining)) })
+            }
+
+            fun proxyRouteTargets(element: JsonElement): JsonElement = when (element) {
+                is JsonObject -> JsonObject(element.mapValues { (key, value) ->
+                    if (key == "outbound") {
+                        when (value) {
+                            is JsonPrimitive -> if (value.content in directTags) JsonPrimitive(selectedProxyTag) else value
+                            is JsonArray -> JsonArray(value.map { tag ->
+                                if ((tag as? JsonPrimitive)?.content in directTags) JsonPrimitive(selectedProxyTag) else tag
+                            })
+                            else -> value
+                        }
+                    } else {
+                        proxyRouteTargets(value)
+                    }
+                })
+                is JsonArray -> JsonArray(element.map(::proxyRouteTargets))
+                else -> element
+            }
+
+            route["final"] = JsonPrimitive(selectedProxyTag)
+            (route["rules"] as? JsonArray)?.let { route["rules"] = proxyRouteTargets(it) }
+            root["route"] = JsonObject(route)
+            root["outbounds"] = JsonArray(protectedOutbounds)
+
+            var tunInboundCount = 0
+            val inbounds = (root["inbounds"] as? JsonArray)?.map { element ->
+                val inbound = element as? JsonObject ?: return@map element
+                if (outboundType(inbound) != "tun") return@map element
+                tunInboundCount++
+                val addresses = (inbound["address"] as? JsonArray)?.toMutableList() ?: mutableListOf()
+                if (addresses.none { (it as? JsonPrimitive)?.content?.contains('.') == true }) {
+                    addresses += JsonPrimitive("172.19.0.1/30")
+                }
+                if (addresses.none { (it as? JsonPrimitive)?.content?.contains(':') == true }) {
+                    addresses += JsonPrimitive("fdfe:dcba:9876::1/126")
+                }
+                JsonObject(inbound.toMutableMap().apply {
+                    put("address", JsonArray(addresses))
+                    put("auto_route", JsonPrimitive(true))
+                    put("strict_route", JsonPrimitive(true))
+                    remove("route_exclude_address")
+                    remove("route_exclude_address_set")
+                })
+            }
+            require(tunInboundCount > 0) { "Le profil ne contient aucun inbound TUN ; aucun trafic ne peut être capturé." }
+            root["inbounds"] = JsonArray(requireNotNull(inbounds))
+            encode(root)
+        }.getOrThrow()
+
     private val json =
         Json {
             ignoreUnknownKeys = true

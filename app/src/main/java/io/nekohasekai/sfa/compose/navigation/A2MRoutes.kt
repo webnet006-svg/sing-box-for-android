@@ -15,13 +15,11 @@ object A2MRoutes {
 
     /** Sous-écrans de Réglages (façon SniTunnel : Connexion, DNS). */
     const val SETTINGS_CONNECTION = "a2m/settings/connection"
-    const val SETTINGS_DNS = "a2m/settings/dns"
     const val SETTINGS_ENGINE = "a2m/settings/engine"
     const val SETTINGS_HOTSPOT = "a2m/settings/hotspot"
     const val SETTINGS_AUTOMATION = "a2m/settings/automation"
     const val SETTINGS_DIAGNOSTICS = "a2m/settings/diagnostics"
     const val SETTINGS_ANTI_CENSORSHIP = "a2m/settings/anti-censorship"
-    const val SETTINGS_ADVANCED = "a2m/settings/advanced"
     const val SETTINGS_ABOUT = "a2m/settings/about"
     const val IP_FINDER = "a2m/tools/ipfinder"
     const val CONSUMPTION = "a2m/settings/consumption"

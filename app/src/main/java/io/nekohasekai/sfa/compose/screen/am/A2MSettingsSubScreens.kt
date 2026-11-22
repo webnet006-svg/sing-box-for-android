@@ -125,15 +125,11 @@ private fun SubSectionLabel(text: String) {
 
 @Composable
 fun A2MSettingsConnectionScreen(
-    serviceStatus: Status,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scaffoldPadding = LocalScaffoldPadding.current
-    val notifyApplyChange = rememberApplyServiceChangeNotifier(serviceStatus)
-
     var dynamicNotification by remember { mutableStateOf(Settings.dynamicNotification) }
-    var allowBypass by remember { mutableStateOf(Settings.allowBypass) }
 
     // Timeout réellement utilisé par les tests TCP de l'écran Serveurs.
     var timeoutSec by remember { mutableStateOf(Settings.connectionTimeoutSec) }
@@ -207,22 +203,6 @@ fun A2MSettingsConnectionScreen(
                     value = backgroundBehaviorLabel(backgroundBehavior),
                     iconTint = A2MColors.Accent,
                     onClick = { showBackgroundDialog = true },
-                )
-            }
-        }
-
-        item {
-            A2MSettingsGroup(title = "Contournement", icon = Icons.Filled.Shield) {
-                A2MSettingSwitchRow(
-                    icon = Icons.Filled.Shield,
-                    title = "Autoriser le contournement du VPN",
-                    subtitle = "Autorise les applications à ignorer le tunnel (redémarrage requis)",
-                    checked = allowBypass,
-                    onCheckedChange = {
-                        allowBypass = it
-                        Settings.allowBypass = it
-                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
-                    },
                 )
             }
         }

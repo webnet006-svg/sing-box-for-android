@@ -1,6 +1,5 @@
 package io.nekohasekai.sfa.compose.screen.am
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,60 +10,39 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.nekohasekai.sfa.compose.base.UiEvent
-import io.nekohasekai.sfa.compose.base.rememberApplyServiceChangeNotifier
 import io.nekohasekai.sfa.compose.model.Group
 import io.nekohasekai.sfa.compose.model.GroupItem
 import io.nekohasekai.sfa.compose.screen.dashboard.DashboardViewModel
 import io.nekohasekai.sfa.compose.screen.dashboard.groups.GroupsViewModel
 import io.nekohasekai.sfa.compose.topbar.LocalScaffoldPadding
-import io.nekohasekai.sfa.constant.ServiceMode
 import io.nekohasekai.sfa.constant.Status
-import io.nekohasekai.sfa.database.Settings
-import io.nekohasekai.sfa.vendor.PackageQueryManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * Page Routage A2M TUN.
  *
- * Toutes les commandes présentes agissent sur le moteur réel :
- * - sélection de la sortie (groupes selector/urltest via le client de commandes)
- * - sortie par application (Settings.perAppProxy*, appliqué au VpnService)
- * Le DNS est affiché tel que déclaré par la configuration (aucune modification factice).
+ * La sélection d'une sortie s'applique aux groupes selector/urltest via le client de commandes.
+ * Le routage par application et le bypass LAN sont désactivés pour garder un tunnel intégral.
  */
 @Composable
 fun A2MRoutingScreen(
@@ -82,97 +60,13 @@ fun A2MRoutingScreen(
             },
         ),
 ) {
-    val context = LocalContext.current
     val scaffoldPadding = LocalScaffoldPadding.current
-    val notifyApplyChange = rememberApplyServiceChangeNotifier(serviceStatus)
 
     val groupsState by groupsViewModel.uiState.collectAsState()
     val dashboardState by dashboardViewModel.uiState.collectAsState()
 
     LaunchedEffect(serviceStatus) {
         groupsViewModel.updateServiceStatus(serviceStatus)
-    }
-
-    val queryMode = Settings.perAppProxyPackageQueryMode
-    val useRoot = queryMode == Settings.PACKAGE_QUERY_MODE_ROOT
-    val shizukuReady by PackageQueryManager.shizukuBinderReady.collectAsState()
-    val shizukuGranted by PackageQueryManager.shizukuPermissionGranted.collectAsState()
-    val shizukuInstalled by PackageQueryManager.shizukuInstalled.collectAsState()
-    val rootAvailable by PackageQueryManager.rootAvailable.collectAsState()
-    val privilegeAvailable =
-        if (useRoot) {
-            rootAvailable == true
-        } else {
-            PackageQueryManager.showModeSelector && shizukuReady && shizukuGranted
-        }
-
-    // Suivi live de l'état Shizuku (même mécanisme que ProfileOverrideScreen).
-    DisposableEffect(queryMode, useRoot) {
-        if (PackageQueryManager.showModeSelector) {
-            PackageQueryManager.registerListeners()
-            PackageQueryManager.refreshShizukuState()
-        }
-        onDispose {
-            if (PackageQueryManager.showModeSelector) {
-                PackageQueryManager.unregisterListeners()
-            }
-        }
-    }
-
-    // Vérifie la disponibilité root dès l'entrée sur la page (met à jour le flux).
-    LaunchedEffect(useRoot) {
-        if (useRoot) {
-            PackageQueryManager.checkRootAvailable()
-        }
-    }
-
-    var perAppEnabled by remember { mutableStateOf(Settings.perAppProxyEnabled) }
-    var perAppMode by remember { mutableStateOf(Settings.perAppProxyMode) }
-    var bypassPrivate by remember { mutableStateOf(Settings.bypassPrivateNetworks) }
-    var serviceMode by remember { mutableStateOf(Settings.serviceMode) }
-    var showPrivilegeDialog by remember { mutableStateOf(false) }
-    var showAppPicker by remember { mutableStateOf(false) }
-    var installedApps by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
-    var selectedApps by remember { mutableStateOf(Settings.perAppProxyList) }
-
-    var dnsServers by remember { mutableStateOf<List<String>>(emptyList()) }
-
-    LaunchedEffect(dashboardState.selectedProfileId) {
-        serviceMode =
-            withContext(Dispatchers.IO) {
-                Settings.detectServiceMode()
-            }
-    }
-
-    LaunchedEffect(dashboardState.selectedProfileId, dashboardState.profiles) {
-        val profile = dashboardState.profiles.firstOrNull { it.id == dashboardState.selectedProfileId }
-        dnsServers =
-            profile?.let { selected ->
-                withContext(Dispatchers.IO) { A2MProfileInfo.dnsServers(selected) }
-            } ?: emptyList()
-    }
-
-    LaunchedEffect(showAppPicker) {
-        if (!showAppPicker) return@LaunchedEffect
-        installedApps =
-            withContext(Dispatchers.IO) {
-                context.packageManager
-                    .getInstalledPackages(0)
-                    .asSequence()
-                    .filter { it.packageName != context.packageName }
-                    .map { info ->
-                        info.packageName to
-                            runCatching {
-                                info.applicationInfo
-                                    ?.let { appInfo ->
-                                        context.packageManager.getApplicationLabel(appInfo).toString()
-                                    } ?: info.packageName
-                            }.getOrDefault(info.packageName)
-                    }
-                    .sortedBy { it.second.lowercase() }
-                    .toList()
-            }
-        selectedApps = Settings.perAppProxyList
     }
 
     Box(
@@ -196,12 +90,7 @@ fun A2MRoutingScreen(
                         color = A2MColors.Text,
                     )
                     Text(
-                        text =
-                        if (serviceMode == ServiceMode.VPN) {
-                            "Mode VPN (TUN) · sortie par ${dashboardState.selectedProfileName ?: "aucun serveur"}"
-                        } else {
-                            "Mode proxy local · sortie par ${dashboardState.selectedProfileName ?: "aucun serveur"}"
-                        },
+                        text = "Sortie par ${dashboardState.selectedProfileName ?: "aucun serveur"}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = A2MColors.Muted,
                     )
@@ -233,210 +122,20 @@ fun A2MRoutingScreen(
             }
 
             item {
-                SectionCard(title = "Routage par application") {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        A2MRadioCard(
-                            title = "Toutes les applications",
-                            subtitle = "Chaque application passe par le VPN.",
-                            selected = !perAppEnabled,
-                            onClick = {
-                                if (perAppEnabled) {
-                                    perAppEnabled = false
-                                    Settings.perAppProxyEnabled = false
-                                    notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
-                                }
-                            },
-                        )
-                        A2MRadioCard(
-                            title = "VPN pour ces applications",
-                            subtitle = "Les autres applications se connectent en direct.",
-                            selected = perAppEnabled && perAppMode == Settings.PER_APP_PROXY_INCLUDE,
-                            onClick = {
-                                if (!privilegeAvailable) {
-                                    showPrivilegeDialog = true
-                                } else {
-                                    perAppEnabled = true
-                                    perAppMode = Settings.PER_APP_PROXY_INCLUDE
-                                    Settings.perAppProxyEnabled = true
-                                    Settings.perAppProxyMode = Settings.PER_APP_PROXY_INCLUDE
-                                    notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
-                                }
-                            },
-                        )
-                        A2MRadioCard(
-                            title = "Pas de VPN pour ces applications",
-                            subtitle = "Par exemple, les applications bancaires restent hors du tunnel.",
-                            selected = perAppEnabled && perAppMode == Settings.PER_APP_PROXY_EXCLUDE,
-                            onClick = {
-                                if (!privilegeAvailable) {
-                                    showPrivilegeDialog = true
-                                } else {
-                                    perAppEnabled = true
-                                    perAppMode = Settings.PER_APP_PROXY_EXCLUDE
-                                    Settings.perAppProxyEnabled = true
-                                    Settings.perAppProxyMode = Settings.PER_APP_PROXY_EXCLUDE
-                                    notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
-                                }
-                            },
-                        )
-                        if (perAppEnabled) {
-                            TextButton(onClick = { showAppPicker = true }) {
-                                Text(
-                                    text = "Choisir les applications (${Settings.perAppProxyList.size})",
-                                    color = A2MColors.Accent,
-                                    fontWeight = FontWeight.Bold,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            item {
-                SectionCard(title = "Réseaux") {
-                    SettingSwitch(
-                        title = "Contourner les réseaux privés",
-                        subtitle = "LAN et lien-local restent hors du tunnel. Requiert un redémarrage du tunnel.",
-                        checked = bypassPrivate,
-                        onCheckedChange = {
-                            bypassPrivate = it
-                            Settings.bypassPrivateNetworks = it
-                            notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
-                        },
+                SectionCard(title = "Tunnel intégral") {
+                    Text(
+                        text = "Le tunnel VPN capture les applications et les réseaux IPv4/IPv6. " +
+                            "Les exclusions d'applications, le bypass LAN et les sorties directes sont neutralisés. " +
+                            "Les DNS déclarés dans chaque profil de serveur sont conservés. Un profil sans inbound TUN " +
+                            "ne peut pas fournir de tunnel intégral et sera refusé au démarrage.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = A2MColors.Muted,
                     )
-                }
-            }
-
-            item {
-                SectionCard(title = "DNS") {
-                    if (dnsServers.isEmpty()) {
-                        SectionHint("Aucun serveur DNS déclaré dans la configuration ; le moteur utilise ses valeurs par défaut.")
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            dnsServers.take(6).forEach { server ->
-                                Text(
-                                    text = server,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = A2MColors.Text,
-                                )
-                            }
-                            Text(
-                                text = "Défini par la configuration du serveur (lecture seule).",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = A2MColors.Muted,
-                            )
-                        }
-                    }
                 }
             }
         }
     }
 
-    if (showPrivilegeDialog) {
-        AlertDialog(
-            onDismissRequest = { showPrivilegeDialog = false },
-            title = { Text("Autorisation requise", color = A2MColors.Text) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "Le routage par application nécessite Shizuku ou l'accès root.",
-                        color = A2MColors.Muted,
-                    )
-                    if (!useRoot && shizukuInstalled) {
-                        Text(
-                            if (shizukuReady) {
-                                "Shizuku est prêt — demandez l'autorisation puis réessayez."
-                            } else {
-                                "Shizuku est installé mais non connecté. Ouvrez Shizuku puis réessayez."
-                            },
-                            color = A2MColors.Muted,
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                if (!useRoot && shizukuInstalled) {
-                    TextButton(
-                        onClick = {
-                            PackageQueryManager.requestShizukuPermission()
-                            PackageQueryManager.refreshShizukuState()
-                            showPrivilegeDialog = false
-                        },
-                    ) {
-                        Text("Demander l'autorisation Shizuku", color = A2MColors.Accent, fontWeight = FontWeight.Bold)
-                    }
-                } else {
-                    TextButton(onClick = { showPrivilegeDialog = false }) {
-                        Text("Compris", color = A2MColors.Accent, fontWeight = FontWeight.Bold)
-                    }
-                }
-            },
-        )
-    }
-
-    if (showAppPicker) {
-        AlertDialog(
-            onDismissRequest = { showAppPicker = false },
-            title = { Text("Applications", color = A2MColors.Text) },
-            text = {
-                Box(modifier = Modifier.heightIn(max = 420.dp)) {
-                    LazyColumn {
-                        items(installedApps, key = { it.first }) { (packageName, label) ->
-                            val checked = selectedApps.contains(packageName)
-                            Row(
-                                modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        selectedApps =
-                                            if (checked) {
-                                                selectedApps - packageName
-                                            } else {
-                                                selectedApps + packageName
-                                            }
-                                    }
-                                    .padding(vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Checkbox(
-                                    checked = checked,
-                                    onCheckedChange = { isChecked ->
-                                        selectedApps =
-                                            if (isChecked) {
-                                                selectedApps + packageName
-                                            } else {
-                                                selectedApps - packageName
-                                            }
-                                    },
-                                )
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = A2MColors.Text,
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        Settings.perAppProxyList = selectedApps
-                        showAppPicker = false
-                        notifyApplyChange(UiEvent.ApplyServiceChange.Mode.Reload)
-                    },
-                ) {
-                    Text("Enregistrer", color = A2MColors.Accent, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAppPicker = false }) {
-                    Text("Annuler", color = A2MColors.Muted)
-                }
-            },
-        )
-    }
 }
 
 @Composable

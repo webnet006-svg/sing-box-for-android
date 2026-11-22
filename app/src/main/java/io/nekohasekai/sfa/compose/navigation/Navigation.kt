@@ -16,7 +16,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import io.nekohasekai.sfa.compose.screen.am.A2MJournalScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MAboutScreen
-import io.nekohasekai.sfa.compose.screen.am.A2MAdvancedModesScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MAntiCensorshipScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MAppearanceScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MRoutingScreen
@@ -27,7 +26,6 @@ import io.nekohasekai.sfa.compose.screen.am.A2MTransfersScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsConnectionScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsAutomationScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MDiagnosticsScreen
-import io.nekohasekai.sfa.compose.screen.am.A2MSettingsDnsScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsEngineScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsHotspotScreen
 import io.nekohasekai.sfa.compose.screen.am.A2MSettingsScreen
@@ -46,13 +44,11 @@ import io.nekohasekai.sfa.compose.screen.log.LogScreen
 import io.nekohasekai.sfa.compose.screen.log.LogViewModel
 import io.nekohasekai.sfa.compose.screen.privilegesettings.PrivilegeSettingsManageScreen
 import io.nekohasekai.sfa.compose.screen.profile.EditProfileRoute
-import io.nekohasekai.sfa.compose.screen.profileoverride.PerAppProxyScreen
 import io.nekohasekai.sfa.compose.screen.settings.AppSettingsScreen
 import io.nekohasekai.sfa.compose.screen.settings.CoreSettingsScreen
 import io.nekohasekai.sfa.compose.screen.settings.EditRemoteServerScreen
 import io.nekohasekai.sfa.compose.screen.settings.FDroidMirrorScreen
 import io.nekohasekai.sfa.compose.screen.settings.PrivilegeSettingsScreen
-import io.nekohasekai.sfa.compose.screen.settings.ProfileOverrideScreen
 import io.nekohasekai.sfa.compose.screen.settings.RemoteControlScreen
 import io.nekohasekai.sfa.compose.screen.settings.ServiceSettingsScreen
 import io.nekohasekai.sfa.compose.screen.settings.SettingsScreen
@@ -231,20 +227,17 @@ fun NavHost(
             popExitTransition = { fadeOut(animationSpec = tween(180)) },
         ) {
             A2MSettingsScreen(
-                serviceStatus = serviceStatus,
                 onNavigate = { route ->
                     navController.navigate(route) {
                         launchSingleTop = true
                     }
                 },
-                dashboardViewModel = dashboardViewModel ?: viewModel(),
                 modifier = Modifier.fillMaxSize(),
             )
         }
 
         composable(A2MRoutes.SETTINGS_CONNECTION) {
             A2MSettingsConnectionScreen(
-                serviceStatus = serviceStatus,
                 onBack = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -268,15 +261,6 @@ fun NavHost(
 
         composable(A2MRoutes.TRANSFERS) {
             A2MTransfersScreen(
-                onBack = { navController.popBackStack() },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-
-        composable(A2MRoutes.SETTINGS_DNS) {
-            A2MSettingsDnsScreen(
-                serviceStatus = serviceStatus,
-                dashboardViewModel = dashboardViewModel ?: viewModel(),
                 onBack = { navController.popBackStack() },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -309,19 +293,6 @@ fun NavHost(
             A2MAntiCensorshipScreen(
                 serviceStatus = serviceStatus,
                 onBack = { navController.popBackStack() },
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-
-        composable(A2MRoutes.SETTINGS_ADVANCED) {
-            A2MAdvancedModesScreen(
-                serviceStatus = serviceStatus,
-                onBack = { navController.popBackStack() },
-                onOpenEngine = { navController.navigate(A2MRoutes.SETTINGS_ENGINE) { launchSingleTop = true } },
-                onOpenHotspot = { navController.navigate(A2MRoutes.SETTINGS_HOTSPOT) { launchSingleTop = true } },
-                onOpenAntiCensorship = {
-                    navController.navigate(A2MRoutes.SETTINGS_ANTI_CENSORSHIP) { launchSingleTop = true }
-                },
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -881,27 +852,7 @@ fun NavHost(
             popEnterTransition = slideInFromLeft,
             popExitTransition = slideOutToRight,
         ) {
-            ServiceSettingsScreen(navController = navController, serviceStatus = serviceStatus)
-        }
-
-        composable(
-            route = "settings/profile_override",
-            enterTransition = slideInFromRight,
-            exitTransition = slideOutToLeft,
-            popEnterTransition = slideInFromLeft,
-            popExitTransition = slideOutToRight,
-        ) {
-            ProfileOverrideScreen(navController = navController, serviceStatus = serviceStatus)
-        }
-
-        composable(
-            route = "settings/profile_override/manage",
-            enterTransition = slideInFromRight,
-            exitTransition = slideOutToLeft,
-            popEnterTransition = slideInFromLeft,
-            popExitTransition = slideOutToRight,
-        ) {
-            PerAppProxyScreen(onBack = { navController.navigateUp() }, serviceStatus = serviceStatus)
+            ServiceSettingsScreen(navController = navController)
         }
 
         composable(

@@ -1,7 +1,6 @@
 package io.nekohasekai.sfa.bg
 
 import android.content.Intent
-import android.content.pm.PackageManager.NameNotFoundException
 import android.net.ProxyInfo
 import android.net.VpnService
 import android.os.Build
@@ -11,7 +10,6 @@ import io.nekohasekai.libbox.Libbox
 import io.nekohasekai.libbox.Notification
 import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.sfa.database.Settings
-import io.nekohasekai.sfa.ktx.toIpPrefix
 import io.nekohasekai.sfa.ktx.toList
 import java.net.Socket
 import kotlinx.coroutines.Dispatchers
@@ -83,10 +81,6 @@ class VPNService :
             builder.setMetered(false)
         }
 
-        if (Settings.allowBypass) {
-            builder.allowBypass()
-        }
-
         val inet4Address = options.inet4Address
         // The address iterators are single-pass. Keep the family information
         // before consuming them so the default-route fallback below remains
@@ -104,86 +98,20 @@ class VPNService :
             builder.addAddress(address.address(), address.prefix())
         }
 
-        if (options.autoRoute) {
-            if (options.dnsMode.value != Libbox.DNSModeDisabled) {
-                val dnsServerAddress = options.dnsServerAddress
-                while (dnsServerAddress.hasNext()) {
-                    builder.addDnsServer(dnsServerAddress.next())
-                }
-            }
+        check(options.autoRoute) { "Le profil n'active pas le routage complet du tunnel." }
+        check(hasInet4Address && hasInet6Address) { "Le tunnel intégral IPv4/IPv6 exige une adresse TUN pour les deux familles." }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val inet4RouteAddress = options.inet4RouteAddress
-                if (inet4RouteAddress.hasNext()) {
-                    while (inet4RouteAddress.hasNext()) {
-                        builder.addRoute(inet4RouteAddress.next().toIpPrefix())
-                    }
-                } else if (hasInet4Address) {
-                    builder.addRoute("0.0.0.0", 0)
-                }
-
-                val inet6RouteAddress = options.inet6RouteAddress
-                if (inet6RouteAddress.hasNext()) {
-                    while (inet6RouteAddress.hasNext()) {
-                        builder.addRoute(inet6RouteAddress.next().toIpPrefix())
-                    }
-                } else if (hasInet6Address) {
-                    builder.addRoute("::", 0)
-                }
-
-                val inet4RouteExcludeAddress = options.inet4RouteExcludeAddress
-                while (inet4RouteExcludeAddress.hasNext()) {
-                    builder.excludeRoute(inet4RouteExcludeAddress.next().toIpPrefix())
-                }
-
-                val inet6RouteExcludeAddress = options.inet6RouteExcludeAddress
-                while (inet6RouteExcludeAddress.hasNext()) {
-                    builder.excludeRoute(inet6RouteExcludeAddress.next().toIpPrefix())
-                }
-            } else {
-                val inet4RouteAddress = options.inet4RouteRange
-                if (inet4RouteAddress.hasNext()) {
-                    while (inet4RouteAddress.hasNext()) {
-                        val address = inet4RouteAddress.next()
-                        builder.addRoute(address.address(), address.prefix())
-                    }
-                }
-
-                val inet6RouteAddress = options.inet6RouteRange
-                if (inet6RouteAddress.hasNext()) {
-                    while (inet6RouteAddress.hasNext()) {
-                        val address = inet6RouteAddress.next()
-                        builder.addRoute(address.address(), address.prefix())
-                    }
-                }
-            }
-
-            val includePackage = options.includePackage
-            if (includePackage.hasNext()) {
-                while (includePackage.hasNext()) {
-                    try {
-                        val nextPackage = includePackage.next()
-                        builder.addAllowedApplication(nextPackage)
-                        Log.d("VPNService", "addAllowedApplication: $nextPackage")
-                    } catch (e: NameNotFoundException) {
-                        Log.e("VPNService", "addAllowedApplication failed", e)
-                    }
-                }
-            }
-
-            val excludePackage = options.excludePackage
-            if (excludePackage.hasNext()) {
-                while (excludePackage.hasNext()) {
-                    try {
-                        val nextPackage = excludePackage.next()
-                        builder.addDisallowedApplication(nextPackage)
-                        Log.d("VPNService", "addDisallowedApplication: $nextPackage")
-                    } catch (e: NameNotFoundException) {
-                        Log.e("VPNService", "addDisallowedApplication failed", e)
-                    }
-                }
+        if (options.dnsMode.value != Libbox.DNSModeDisabled) {
+            val dnsServerAddress = options.dnsServerAddress
+            while (dnsServerAddress.hasNext()) {
+                builder.addDnsServer(dnsServerAddress.next())
             }
         }
+
+        // No route exclusions or per-app allow/disallow lists: all Android
+        // applications and both IP families must enter the VPN interface.
+        builder.addRoute("0.0.0.0", 0)
+        builder.addRoute("::", 0)
 
         if (options.isHTTPProxyEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             systemProxyAvailable = true

@@ -842,13 +842,11 @@ class MainActivity :
 
         val isA2MSubScreen =
             currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_CONNECTION ||
-                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_DNS ||
                 currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_ENGINE ||
                 currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_HOTSPOT ||
                 currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_AUTOMATION ||
             currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_DIAGNOSTICS ||
                 currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_ANTI_CENSORSHIP ||
-                currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_ADVANCED ||
                 currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.SETTINGS_ABOUT ||
                 currentRoute == io.nekohasekai.sfa.compose.navigation.A2MRoutes.APPEARANCE
         val isSubScreen = isSettingsSubScreen || isToolsSubScreen || isConnectionsDetail || isProfileRoute || isA2MSubScreen

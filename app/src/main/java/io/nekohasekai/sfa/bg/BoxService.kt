@@ -38,7 +38,6 @@ import io.nekohasekai.sfa.database.ProfileManager
 import io.nekohasekai.sfa.database.Settings
 import io.nekohasekai.sfa.ktx.hasPermission
 import io.nekohasekai.sfa.utils.AppLifecycleObserver
-import io.nekohasekai.sfa.vendor.Vendor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -273,75 +272,27 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             try {
                 Libbox.checkConfig(effectiveContent)
             } catch (e: Exception) {
-                // A remote ad rule-set must never make the VPN unusable.
-                // Retry validation without the optional decoration and keep
-                // the service available; the UI can report the degraded mode.
-                if (!Settings.adBlockEnabled) {
-                    stopAndAlert(Alert.CreateService, e.message)
-                    return
-                }
-                effectiveContent = effectiveContent(content, adBlock = false)
-                _adBlockSessionState.value = AdBlockSessionState.Failed
-                Log.w(TAG, "Adblock configuration rejected, starting without adblock", e)
+                stopAndAlert(Alert.CreateService, e.message)
+                return
             }
 
-            val serviceOverride =
-                OverrideOptions().apply {
-                    autoRedirect = Settings.autoRedirect
-                    if (Vendor.isPerAppProxyAvailable() && Settings.perAppProxyEnabled) {
-                        val appList = Settings.getEffectivePerAppProxyList()
-                        if (Settings.getEffectivePerAppProxyMode() == Settings.PER_APP_PROXY_INCLUDE) {
-                            includePackage =
-                                PlatformInterfaceWrapper.StringArray((appList + Application.application.packageName).iterator())
-                        } else {
-                            excludePackage =
-                                PlatformInterfaceWrapper.StringArray((appList - Application.application.packageName).iterator())
-                        }
-                    }
-                }
+            val serviceOverride = OverrideOptions().apply {
+                autoRedirect = Settings.autoRedirect
+            }
 
             try {
                 commandServer.startOrReloadService(effectiveContent, serviceOverride)
-                if (_adBlockSessionState.value in setOf(AdBlockSessionState.Loading, AdBlockSessionState.Error)) {
-                    _adBlockSessionState.value = AdBlockSessionState.Active
-                }
             } catch (e: Exception) {
-                if (Settings.adBlockEnabled) _adBlockSessionState.value = AdBlockSessionState.Error
                 // Filet de sécurité : noyau compilé sans gVisor + profil demandant gVisor/mixed
                 // => réécriture de la pile TUN en "system" et nouvelle tentative unique.
                 val fallbackContent = buildStackFallbackContent(effectiveContent, e.message)
                 if (fallbackContent == null) {
-                    if (Settings.adBlockEnabled) {
-                        val withoutAdBlock = effectiveContent(content, adBlock = false)
-                        try {
-                            commandServer.startOrReloadService(withoutAdBlock, serviceOverride)
-                            _adBlockSessionState.value = AdBlockSessionState.Failed
-                            Log.w(TAG, "Tunnel started without adblock after rule-set failure")
-                        } catch (retryError: Exception) {
-                            stopAndAlert(Alert.CreateService, retryError.message)
-                            return
-                        }
-                    } else {
-                        stopAndAlert(Alert.CreateService, e.message)
-                        return
-                    }
-                    // The optional feature was rejected; continue with the VPN.
-                    if (Settings.adBlockEnabled) {
-                        Log.w(TAG, "Adblock disabled for this session after startup failure")
-                        GlobalEventBus.tryEmit(
-                            UiEvent.WarningMessage(
-                                "Le tunnel est connecté, mais l'Ad blocker n'a pas pu charger sa liste. " +
-                                    "Le blocage des publicités n'est pas actif pour cette session.",
-                            ),
-                        )
-                    }
+                    stopAndAlert(Alert.CreateService, e.message)
+                    return
                 } else {
                     Log.w(TAG, "gVisor stack unavailable, retrying with system stack")
                     try {
                         commandServer.startOrReloadService(fallbackContent, serviceOverride)
-                        if (_adBlockSessionState.value in setOf(AdBlockSessionState.Loading, AdBlockSessionState.Error)) {
-                            _adBlockSessionState.value = AdBlockSessionState.Active
-                        }
                         // The fallback is expected on Android builds without the
                         // optional gVisor implementation. Keep it out of the error
                         // channel: the tunnel is healthy and a modal dialog here
@@ -386,18 +337,19 @@ class BoxService(private val service: Service, private val platformInterface: Pl
      * configuration avec `"stack": "system"`, sinon null.
      */
     /** Contenu effectivement chargé : config du profil + décorations A2M (LAN, DNS, moteur, pub). */
-    private fun effectiveContent(raw: String, adBlock: Boolean = Settings.adBlockEnabled): String {
-        _adBlockSessionState.value = if (adBlock) AdBlockSessionState.Loading else AdBlockSessionState.Disabled
-        val dnsOverride =
-            if (Settings.dnsOverrideEnabled) {
-                A2MConfigDecorations.DnsOverride(
-                    type = Settings.dnsRemoteType,
-                    remoteServer = Settings.dnsRemoteServer.trim(),
-                    bootstrapServer = Settings.dnsBootstrapServer.trim(),
-                )
-            } else {
-                null
-            }
+    private fun effectiveContent(raw: String): String {
+        // These global overrides were removed from A2M Settings. Clear values
+        // saved by older builds so they cannot silently alter a server profile.
+        if (Settings.adBlockEnabled) Settings.adBlockEnabled = false
+        if (Settings.dnsOverrideEnabled) Settings.dnsOverrideEnabled = false
+        if (Settings.gamingMode) Settings.gamingMode = false
+        if (Settings.allowBypass) Settings.allowBypass = false
+        if (Settings.perAppProxyEnabled) Settings.perAppProxyEnabled = false
+        if (Settings.bypassPrivateNetworks) Settings.bypassPrivateNetworks = false
+        _adBlockSessionState.value = AdBlockSessionState.Disabled
+        // Preserve each server profile's DNS declaration exactly (after only
+        // the existing sing-box legacy-format normalization).
+        val dnsOverride = null
         val engineNeedsApplying =
             Settings.engineMtuMode != "auto" ||
                 Settings.engineStackMode != "auto" ||
@@ -426,13 +378,13 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             }
         val result = A2MConfigDecorations.decorateWithReport(
             raw = raw,
-            bypassPrivate = Settings.bypassPrivateNetworks,
+            bypassPrivate = false,
             dns = dnsOverride,
             engine = engine,
-            adBlock = adBlock,
             hotspotPort = if (Settings.hotspotProxyEnabled) Settings.hotspotProxyPort else null,
             tls = tls,
-            gaming = Settings.gamingMode,
+            adBlock = false,
+            gaming = false,
         )
         if (result.failures.isNotEmpty() || result.skipped.isNotEmpty()) {
             if (result.failures.any { it.setting == "Ad blocker" }) {
@@ -442,7 +394,7 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                 result.failures.forEach { add("• ${it.setting} : ${it.reason}") }
                 result.skipped.forEach { add("• ${it} : aucun élément compatible dans cette configuration") }
             }.joinToString("\n")
-            Log.w(TAG, "Configuration VPN partiellement appliquée:\n$details")
+            Log.w(TAG, "Certaines options de profil ou du moteur n'ont pas été appliquées:\n$details")
             GlobalEventBus.tryEmit(
                 UiEvent.WarningMessage(
                     "Certaines options demandées n'ont pas été appliquées à cette session :\n$details\n" +
@@ -450,7 +402,9 @@ class BoxService(private val service: Service, private val platformInterface: Pl
                 ),
             )
         }
-        return result.content
+        // Fail closed before Libbox can establish a partial/proxy-only service:
+        // all app traffic must be captured and routed to a proxy outbound.
+        return A2MConfigDecorations.enforceFullTunnel(result.content)
     }
 
     private fun buildStackFallbackContent(content: String, cause: String?): String? {
@@ -515,79 +469,29 @@ class BoxService(private val service: Service, private val platformInterface: Pl
             stopAndAlert(Alert.EmptyConfiguration)
             return
         }
-        // Décoration A2M (bloqueur de pubs) appliquée aussi au rechargement.
-        var effectiveContent = effectiveContent(content)
+        val effectiveContent = effectiveContent(content)
         try {
             Libbox.checkConfig(effectiveContent)
         } catch (error: Exception) {
-            if (!Settings.adBlockEnabled) {
-                Log.e(TAG, "Rejected invalid configuration reload; keeping current tunnel", error)
-                GlobalEventBus.tryEmit(
-                    UiEvent.ErrorMessage("Configuration invalide : le tunnel actuel est conservé. ${error.message.orEmpty()}"),
-                )
-                return
-            }
-            val withoutAdBlock = effectiveContent(content, adBlock = false)
-            try {
-                Libbox.checkConfig(withoutAdBlock)
-                effectiveContent = withoutAdBlock
-                _adBlockSessionState.value = AdBlockSessionState.Failed
-                GlobalEventBus.tryEmit(
-                    UiEvent.WarningMessage("La configuration Ad blocker est invalide. Le tunnel actuel est conservé ou rechargé sans blocage."),
-                )
-            } catch (fallbackError: Exception) {
-                _adBlockSessionState.value = AdBlockSessionState.Error
-                Log.e(TAG, "Rejected invalid reload and Ad blocker fallback; keeping current tunnel", fallbackError)
-                GlobalEventBus.tryEmit(
-                    UiEvent.ErrorMessage("La nouvelle configuration est invalide ; le tunnel actuel est conservé. ${fallbackError.message.orEmpty()}"),
-                )
-                return
-            }
+            Log.e(TAG, "Rejected invalid configuration reload; keeping current tunnel", error)
+            GlobalEventBus.tryEmit(
+                UiEvent.ErrorMessage("Configuration invalide : le tunnel actuel est conservé. ${error.message.orEmpty()}"),
+            )
+            return
         }
         lastProfileName = profile.name
-        val serviceOverride =
-            OverrideOptions().apply {
-                autoRedirect = Settings.autoRedirect
-                if (Vendor.isPerAppProxyAvailable() && Settings.perAppProxyEnabled) {
-                    val appList = Settings.getEffectivePerAppProxyList()
-                    if (Settings.getEffectivePerAppProxyMode() == Settings.PER_APP_PROXY_INCLUDE) {
-                        includePackage = PlatformInterfaceWrapper.StringArray((appList + Application.application.packageName).iterator())
-                    } else {
-                        excludePackage = PlatformInterfaceWrapper.StringArray((appList - Application.application.packageName).iterator())
-                    }
-                }
-            }
+        val serviceOverride = OverrideOptions().apply {
+            autoRedirect = Settings.autoRedirect
+        }
         try {
             commandServer.startOrReloadService(effectiveContent, serviceOverride)
-            if (_adBlockSessionState.value in setOf(AdBlockSessionState.Loading, AdBlockSessionState.Error)) {
-                _adBlockSessionState.value = AdBlockSessionState.Active
-            }
         } catch (e: Exception) {
-            if (Settings.adBlockEnabled) _adBlockSessionState.value = AdBlockSessionState.Error
-            // Reloads (DNS/ad-block toggles) must use the same gVisor fallback
+            // Reloads must use the same gVisor fallback
             // as the initial start. Otherwise the old service is torn down and
             // the UI reports a misleading RPC EOF while the tunnel is stopped.
             val fallbackContent = buildStackFallbackContent(effectiveContent, e.message)
             if (fallbackContent == null) {
-                if (Settings.adBlockEnabled) {
-                    try {
-                        commandServer.startOrReloadService(effectiveContent(content, adBlock = false), serviceOverride)
-                        _adBlockSessionState.value = AdBlockSessionState.Failed
-                        Log.w(TAG, "Tunnel reloaded without adblock after rule-set failure")
-                        GlobalEventBus.tryEmit(
-                            UiEvent.WarningMessage(
-                                "Le tunnel reste actif, mais l'Ad blocker n'a pas pu charger sa liste " +
-                                    "et n'est pas appliqué à cette session.",
-                            ),
-                        )
-                    } catch (retryError: Exception) {
-                        // Keep the current service alive when possible. A failed
-                        // optional reload must not turn a connected VPN off.
-                        Log.e(TAG, "Optional adblock reload failed", retryError)
-                    }
-                } else {
-                    Log.e(TAG, "Service reload failed; keeping current tunnel", e)
-                }
+                Log.e(TAG, "Service reload failed; keeping current tunnel", e)
                 return
             }
             Log.w(TAG, "gVisor stack unavailable during reload, retrying with system stack")

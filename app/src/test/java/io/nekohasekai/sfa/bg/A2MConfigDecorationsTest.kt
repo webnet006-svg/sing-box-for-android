@@ -236,6 +236,58 @@ class A2MConfigDecorationsTest {
         assertFalse(system.containsKey("detour"))
     }
 
+    // ── Politique de tunnel intégral Android ─────────────────────────────────
+
+    @Test
+    fun fullTunnelRoutesBothFamiliesAndPreservesProfileDns() {
+        val config =
+            """{"inbounds":[{"type":"tun","tag":"tun-in","address":["10.0.0.1/30"],"route_exclude_address":["192.168.0.0/16"]}],""" +
+                """"outbounds":[{"type":"trojan","tag":"proxy","server":"vpn.example"},{"type":"direct","tag":"direct"}],""" +
+                """"dns":{"servers":[{"type":"https","tag":"profile-dns","server":"cloudflare-dns.com","server_port":443,"path":"/dns-query","detour":"proxy"}],"final":"profile-dns"},""" +
+                """"route":{"final":"proxy","rules":[{"ip_is_private":true,"outbound":"direct"}]}}"""
+
+        val root = parse(A2MConfigDecorations.enforceFullTunnel(config))
+        val tun = root["inbounds"]!!.jsonArray.single().jsonObject
+        assertEquals(true, tun["auto_route"]!!.jsonPrimitive.boolean)
+        assertEquals(true, tun["strict_route"]!!.jsonPrimitive.boolean)
+        assertFalse(tun.containsKey("route_exclude_address"))
+        assertTrue(tun["address"]!!.jsonArray.any { it.jsonPrimitive.content.contains(":") })
+        assertEquals(
+            "cloudflare-dns.com",
+            root["dns"]!!.jsonObject["servers"]!!.jsonArray.single().jsonObject["server"]!!.jsonPrimitive.content,
+        )
+        assertEquals("profile-dns", root["dns"]!!.jsonObject["final"]!!.jsonPrimitive.content)
+        val route = root["route"]!!.jsonObject
+        assertEquals("proxy", route["final"]!!.jsonPrimitive.content)
+        assertEquals("proxy", route["rules"]!!.jsonArray.single().jsonObject["outbound"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun fullTunnelRejectsProfilesWithoutTunOrProxy() {
+        assertThrows(RuntimeException::class.java) {
+            A2MConfigDecorations.enforceFullTunnel(
+                """{"inbounds":[],"outbounds":[{"type":"trojan","tag":"proxy"}]}""",
+            )
+        }
+        assertThrows(RuntimeException::class.java) {
+            A2MConfigDecorations.enforceFullTunnel(
+                """{"inbounds":[{"type":"tun","tag":"tun-in"}],"outbounds":[{"type":"direct","tag":"direct"}]}""",
+            )
+        }
+    }
+
+    @Test
+    fun fullTunnelRemovesDirectFromSelectableGroups() {
+        val config =
+            """{"inbounds":[{"type":"tun","tag":"tun-in"}],""" +
+                """"outbounds":[{"type":"selector","tag":"select","outbounds":["proxy","direct"]},{"type":"trojan","tag":"proxy"},{"type":"direct","tag":"direct"}],""" +
+                """"route":{"final":"select"}}"""
+
+        val root = parse(A2MConfigDecorations.enforceFullTunnel(config))
+        val selector = root["outbounds"]!!.jsonArray.first().jsonObject
+        assertEquals(listOf("proxy"), selector["outbounds"]!!.jsonArray.map { it.jsonPrimitive.content })
+    }
+
     @Test
     fun normalizeDnsKeepsProxyDetourAndMovesLegacyStrategy() {
         val config =
