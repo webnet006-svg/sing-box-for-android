@@ -5,6 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import io.nekohasekai.sfa.R
 import io.nekohasekai.sfa.dams.theme.ThemePackage
 import io.nekohasekai.sfa.database.Settings
 
@@ -388,6 +392,7 @@ object A2MThemeState {
     /** Charge les préférences persistées au démarrage de l'application. */
     fun load() {
         fontId = A2MFontCatalog.normalizedId(Settings.a2mFontId)
+        if (Settings.a2mFontId != fontId) Settings.a2mFontId = fontId
         orbAnimationId = A2MOrbAnimations.normalizedId(Settings.a2mOrbAnimationId)
         val savedKey = Settings.themeKey
         // Migration douce de l'ancien identifiant de palette « onfaa ».
@@ -460,35 +465,40 @@ object A2MThemeState {
     }
 }
 
-/** Built-in Android typefaces only: no runtime downloads or added font binaries. */
-data class A2MFontChoice(val id: String, val label: String, val familyName: String)
+/** Polices statiques embarquées : apparence identique sur les fabricants et Android anciens. */
+data class A2MFontChoice(val id: String, val label: String, val resourceId: Int)
 
 object A2MFontCatalog {
     val choices = listOf(
-        A2MFontChoice("system", "Système", "sans-serif"),
-        A2MFontChoice("condensed", "Condensée", "sans-serif-condensed"),
-        A2MFontChoice("light", "Fine", "sans-serif-light"),
-        A2MFontChoice("medium", "Moyenne", "sans-serif-medium"),
-        A2MFontChoice("black", "Noire", "sans-serif-black"),
-        A2MFontChoice("thin", "Légère", "sans-serif-thin"),
-        A2MFontChoice("condensed-light", "Condensée fine", "sans-serif-condensed-light"),
-        A2MFontChoice("condensed-medium", "Condensée moyenne", "sans-serif-condensed-medium"),
-        A2MFontChoice("condensed-black", "Condensée noire", "sans-serif-condensed-black"),
-        A2MFontChoice("rounded", "Arrondie", "sans-serif-rounded"),
-        A2MFontChoice("serif", "Sérif", "serif"),
-        A2MFontChoice("monospace", "Monospace", "monospace"),
-        A2MFontChoice("casual", "Décontractée", "casual"),
-        A2MFontChoice("cursive", "Manuscrite", "cursive"),
-        A2MFontChoice("small-caps", "Petites capitales", "sans-serif-smallcaps"),
+        A2MFontChoice("atkinson", "Atkinson Hyperlegible", R.font.a2m_font_atkinson_hyperlegible),
+        A2MFontChoice("abeezee", "ABeeZee", R.font.a2m_font_abeezee),
+        A2MFontChoice("cousine", "Cousine", R.font.a2m_font_cousine),
+        A2MFontChoice("fira-sans", "Fira Sans", R.font.a2m_font_fira_sans),
+        A2MFontChoice("fira-mono", "Fira Mono", R.font.a2m_font_fira_mono),
+        A2MFontChoice("ibm-plex-mono", "IBM Plex Mono", R.font.a2m_font_ibm_plex_mono),
+        A2MFontChoice("lato", "Lato", R.font.a2m_font_lato),
+        A2MFontChoice("mukta", "Mukta", R.font.a2m_font_mukta),
+        A2MFontChoice("oxygen", "Oxygen", R.font.a2m_font_oxygen),
+        A2MFontChoice("pt-sans", "PT Sans", R.font.a2m_font_pt_sans),
+        A2MFontChoice("pt-serif", "PT Serif", R.font.a2m_font_pt_serif),
+        A2MFontChoice("tinos", "Tinos", R.font.a2m_font_tinos),
+        A2MFontChoice("titillium", "Titillium Web", R.font.a2m_font_titillium_web),
+        A2MFontChoice("varela", "Varela Round", R.font.a2m_font_varela_round),
+        A2MFontChoice("zilla", "Zilla Slab", R.font.a2m_font_zilla_slab),
     )
 
-    fun normalizedId(id: String): String = choices.firstOrNull { it.id == id }?.id ?: "system"
+    private val defaultId = "lato"
 
-    fun family(id: String): androidx.compose.ui.text.font.FontFamily {
-        val choice = choices.firstOrNull { it.id == normalizedId(id) } ?: choices.first()
-        val typeface = android.graphics.Typeface.create(choice.familyName, android.graphics.Typeface.NORMAL)
-        return androidx.compose.ui.text.font.FontFamily(typeface)
-    }
+    fun normalizedId(id: String): String =
+        when {
+            id == "system" -> defaultId // Migration depuis les anciennes préférences OEM.
+            else -> choices.firstOrNull { it.id == id }?.id ?: defaultId
+        }
+
+    fun family(id: String): FontFamily =
+        choices.firstOrNull { it.id == normalizedId(id) }
+            ?.let { choice -> FontFamily(Font(choice.resourceId, FontWeight.Normal)) }
+            ?: FontFamily.Default
 }
 
 data class A2MOrbAnimation(val id: String, val label: String, val description: String)

@@ -39,4 +39,13 @@ class A2MSettingsTransplantTest {
         assertTrue(timeoutChoices().all { it.description == null })
         assertTrue(backgroundBehaviorChoices().all { !it.description.isNullOrBlank() })
     }
+
+    @Test
+    fun bundledFontCatalogHasFifteenDistinctChoicesAndMigratesLegacyValues() {
+        assertEquals(15, A2MFontCatalog.choices.size)
+        assertEquals(15, A2MFontCatalog.choices.map { it.resourceId }.toSet().size)
+        assertEquals("lato", A2MFontCatalog.normalizedId("system"))
+        assertEquals("lato", A2MFontCatalog.normalizedId("unknown-font"))
+        assertEquals("fira-sans", A2MFontCatalog.normalizedId("fira-sans"))
+    }
 }
