@@ -17,9 +17,9 @@ class A2MSettingsTransplantTest {
     }
 
     @Test
-    fun themeModeFromKeyFallsBackToLight() {
-        assertEquals(A2MThemeMode.LIGHT, A2MThemeMode.fromKey("unknown-key"))
-        assertEquals(A2MThemeMode.LIGHT, A2MThemeMode.fromKey(""))
+    fun themeModeFromKeyFallsBackToDark() {
+        assertEquals(A2MThemeMode.DARK, A2MThemeMode.fromKey("unknown-key"))
+        assertEquals(A2MThemeMode.DARK, A2MThemeMode.fromKey(""))
     }
 
     @Test

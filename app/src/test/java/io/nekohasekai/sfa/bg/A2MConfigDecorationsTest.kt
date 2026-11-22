@@ -88,7 +88,7 @@ class A2MConfigDecorationsTest {
     @Test
     fun dnsOverrideUsesNewFormatAndRoutesServerNameThroughBootstrap() {
         val config =
-            """{"outbounds":[{"type":"vmess","tag":"proxy"}],""" +
+            """{"outbounds":[{"type":"vmess","tag":"proxy","server":"vpn.example.com"}],""" +
                 """"dns":{"servers":[{"type":"udp","tag":"old"}],"final":"old"},"route":{"rules":[]}}"""
         val root = parse(
             A2MConfigDecorations.withDnsOverride(
