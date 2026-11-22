@@ -1,5 +1,6 @@
 package io.nekohasekai.sfa.bg
 
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager.NameNotFoundException
 import android.net.ConnectivityManager
@@ -42,7 +43,7 @@ class VPNService :
          */
         fun resolveProbeAddresses(host: String): List<InetAddress> {
             val instance = activeInstance ?: return runCatching { InetAddress.getAllByName(host).toList() }.getOrDefault(emptyList())
-            val connectivity = instance.getSystemService(ConnectivityManager::class.java)
+            val connectivity = instance.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             val physical = connectivity?.allNetworks?.filter { network ->
                 val capabilities = connectivity.getNetworkCapabilities(network)
                 capabilities != null &&
