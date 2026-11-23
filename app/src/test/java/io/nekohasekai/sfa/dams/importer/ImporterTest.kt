@@ -174,7 +174,8 @@ class ImporterTest {
 
         val inbound = root.array("inbounds")[0].jsonObject
         assertEquals("tun", inbound.str("type"))
-        assertEquals("mixed", inbound.str("stack"))
+        assertEquals("1500", inbound.str("mtu"))
+        assertEquals("system", inbound.str("stack"))
 
         val outbounds = root.array("outbounds")
         assertEquals("proxy", outbounds[0].jsonObject.str("tag"))

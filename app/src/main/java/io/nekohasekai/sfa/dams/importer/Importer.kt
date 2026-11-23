@@ -152,10 +152,17 @@ object Importer {
                                     add(JsonPrimitive("fdfe:dcba:9876::1/126"))
                                 },
                             )
-                            put("mtu", 9000)
+                            // 9000 causes fragmentation/retransmits on most mobile
+                            // networks. Keep imported profiles on a conservative
+                            // Ethernet-compatible MTU; users can still override it
+                            // from the engine settings when they have measurements.
+                            put("mtu", 1500)
                             put("auto_route", true)
                             put("strict_route", true)
-                            put("stack", "mixed")
+                            // Avoid a failed gVisor/mixed first start on builds or
+                            // devices where that optional stack is unavailable.
+                            // The explicit engine setting can opt into gVisor.
+                            put("stack", "system")
                         },
                     )
                 },
